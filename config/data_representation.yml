@@ -1,0 +1,9 @@
+n_fft: 510
+num_frames: 256
+hop_length: 128
+
+spec_abs_exponent: 0.5
+spec_factor: 0.33
+
+window: 'sqrthann'
+
