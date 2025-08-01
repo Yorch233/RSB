@@ -1,0 +1,35 @@
+inherit: 'dataset.yml'
+dataset: 'voicebank'
+
+generative_backbone: 'ncsnpp_base'
+predictive_backbone: 'ncsnpp_base'
+
+bridge_type: 'VE'
+training_method: 'regularization'
+training_target: 'data'
+
+learning_rate: 1.0e-4
+batch_size: 16
+evaluate_batch_size: 16
+patience: 20
+seed: 10
+
+num_epoch: 1000
+ema_rate: 0.999
+optimizer: 'Adam'
+sample_rate: 16000
+reduction: 'sum'
+load_posterior_mean: False
+loss_weight_type: 'constant'
+regularization_weight: 'quadratic'
+
+t_min: 1.0e-4
+t_max: 1
+checkpoints_total_limit: 3
+time_loss_weight: 1.0e-3
+log_steps: 10
+save_state_steps: 1000
+
+
+run_dir: '/root/autodl-tmp/runs'
+log_with: 'wandb'

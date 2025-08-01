@@ -1,0 +1,9 @@
+inherit: 'data_representation.yml'
+
+datasets:
+  voicebank+demand: '/path/to/voicebank+demand'
+
+normalize_audio: True
+sample_rate: 16000
+audio_length: 16000
+spatial_channels: 1
