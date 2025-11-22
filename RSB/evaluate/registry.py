@@ -1,3 +1,3 @@
-from DisperSE.common.register import Register
+from RSB.common.register import Register
 
 MetricRegister = Register()
