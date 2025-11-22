@@ -276,9 +276,9 @@ class DNSMOSMetric(AudioMetric):
         """
         super().__init__(**kwargs)
         # Define paths to ONNX models
-        p808_model_path = os.path.join('DisperSE', 'evaluate', 'DNSMOS',
+        p808_model_path = os.path.join('RSB', 'evaluate', 'DNSMOS',
                                        'DNSMOS', 'model_v8.onnx')
-        primary_model_path = os.path.join('DisperSE', 'evaluate', 'DNSMOS',
+        primary_model_path = os.path.join('RSB', 'evaluate', 'DNSMOS',
                                           'DNSMOS', 'sig_bak_ovr.onnx')
         # Initialize the DNSMOS computation class
         self.compute = ComputeScore(primary_model_path, p808_model_path)
