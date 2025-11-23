@@ -8,7 +8,7 @@ from torch import nn
 
 from RSB.backbone import BackboneRegister
 from RSB.common.config import Config, read_config_from_yaml
-from RSB.dataset.ComplexSpecDatatet import STFTUtil
+from RSB.dataset.ComplexSpecDataset import STFTUtil
 from RSB.sdes import SB_VESDE, SB_VPSDE
 
 
