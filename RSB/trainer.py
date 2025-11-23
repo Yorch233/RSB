@@ -60,7 +60,7 @@ class RSB_Trainer():
         os.makedirs(self.checkpoint_path, exist_ok=True)
 
         # --- Initialize Accelerator for distributed training/mixed precision ---
-        ddp_kwargs = DistributedDataParallelKwargs(find_unused_parameters=True)
+        ddp_kwargs = DistributedDataParallelKwargs(find_unused_parameters=False)
         self.accelerator = Accelerator(log_with=self.config.get('log_with'),
                                        kwargs_handlers=[ddp_kwargs])
         self.device = self.accelerator.device
@@ -241,10 +241,14 @@ class RSB_Trainer():
 
         dataloader = torch.utils.data.DataLoader(
             dataset,
-            pin_memory=True,  # Speed up GPU transfer
             batch_size=self.config.batch_size,
             # Shuffle only for training data
-            shuffle=(subset == 'train'))
+            shuffle=(subset == 'train'),
+            num_workers=self.config.get("num_workers", 8), # Return spectrograms
+            pin_memory=True,
+            persistent_workers=True, 
+            prefetch_factor=2,
+            drop_last=(subset=='train'))
         return dataloader
 
     def print(self, *args):
@@ -422,7 +426,7 @@ class RSB_Trainer():
             # --- Evaluate audio quality metrics ---
             result = self.evaluate_metrics(subset='valid',
                                            n_samples=50,
-                                           num_step=20)
+                                           num_step=50)
             pesq_score = float(result.get('PESQ', 0.0))
             sisdr_score = float(result.get('SI_SDR',
                                            -100.0))  # Default low value
@@ -563,7 +567,7 @@ class RSB_Trainer():
         self.accelerator.end_training()
         logger.info("Training completed.")
 
-def evaluate_metrics(self, subset='valid', n_samples=0, solver='SDE', num_step=5):
+    def evaluate_metrics(self, subset='valid', n_samples=0, solver='SDE', num_step=5):
         """
         Evaluates audio quality metrics (PESQ, SI-SDR) on a dataset subset.
 
