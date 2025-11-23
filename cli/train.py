@@ -91,6 +91,15 @@ def parse_arguments(config):
         action='store_true',
         help='(Placeholder/Unused) Flag for potential dummy runs or testing.')
     parser.add_argument(
+        '--wechat_notify',
+        action='store_true',
+        help='Enable WeChat notifications via AutoDL API (every 10 epochs + start/end).')
+    parser.add_argument(
+        '--autodl_token',
+        type=str,
+        default=config.get("autodl_token", ""),
+        help='AutoDL API token for WeChat notifications.')
+    parser.add_argument(
         '--checkpoint_path',
         type=str,
         help=
@@ -125,10 +134,17 @@ def parse_arguments(config):
         '--regularization_weight',  # Note: Typo preserved from original ('regulization' instead of 'regularization')
         type=str,
         default=config.regularization_weight,
-        choices=['quadratic', 'linear'],
+        choices=['quadratic', 'linear', 'cosine'],
         help=
         'Type of regularization to apply if --training_method=regularization is selected: '
-        'quadratic or linear weight.')
+        'quadratic, linear, or cosine weight.')
+    parser.add_argument(
+        '--posterior_mean_from',
+        type=str,
+        default=config.get("posterior_mean_from", "NCSN++M"),
+        choices=['NCSN++M', 'MetricGAN+', 'SEMamba', 'MP-SENet'],
+        help='Which predictive model\'s posterior mean to load '
+        '(only effective when --load_posterior_mean is set).')
 
     return parser.parse_args()
 

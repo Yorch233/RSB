@@ -19,7 +19,8 @@ ema_rate: 0.999
 optimizer: 'Adam'
 sample_rate: 16000
 reduction: 'sum'
-load_posterior_mean: False
+load_posterior_mean: True
+posterior_mean_from: 'NCSN++M'
 loss_weight_type: 'constant'
 regularization_weight: 'quadratic'
 
@@ -33,3 +34,6 @@ save_state_steps: 1000
 
 run_dir: '/root/autodl-tmp/runs'
 log_with: 'wandb'
+
+wechat_notify: False
+autodl_token: 'eyJhbGciOiJFUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1aWQiOjM3NDQzNSwidXVpZCI6IjVlZWEzNzg0LWQ0ZjUtNDIyMS04YTFhLTkxMjAyMWQ5NDc4ZiIsImlzX2FkbWluIjpmYWxzZSwiYmFja3N0YWdlX3JvbGUiOiIiLCJpc19zdXBlcl9hZG1pbiI6ZmFsc2UsInN1Yl9uYW1lIjoiIiwidGVuYW50IjoiYXV0b2RsIiwidXBrIjoiIn0.5C06X07zQgpssmwv1CYJLX2XA4IRGCrcmpY9oQ9mPD24dnwdkNsgzQohnWphZPnj_GzcajSHAFDOGoTnYiRg0A'

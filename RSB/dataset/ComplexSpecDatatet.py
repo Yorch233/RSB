@@ -9,6 +9,8 @@ from torch.utils.data import Dataset
 from RSB.backbone.registry import BackboneRegister
 from RSB.dataset.AudioFolder import AudioFolder
 
+SUPPORTED_POSTERIOR_MEAN_SOURCES = ["NCSN++M", "MetricGAN+", "SEMamba", "MP-SENet"]
+
 
 def get_window(window_type, window_length):
     """Generate window functions for STFT
@@ -173,6 +175,7 @@ class ComplexSpecDataset(Dataset):
                  return_raw=False,
                  return_spec=True,
                  load_posterior_mean=False,
+                 posterior_mean_from="NCSN++M",
                  dummy=False):
         self.sample_rate = config.sample_rate
         self.audio_length = config.audio_length
@@ -195,11 +198,14 @@ class ComplexSpecDataset(Dataset):
 
         self.load_posterior_mean = load_posterior_mean
         if load_posterior_mean:
-            assert os.path.exists(
-                os.path.join(self.data_dir, subset, 'mean')
-            ), f"Fail to load posterior mean from local files. Dictionary  {os.path.join(self.data_dir, subset, 'mean')} doesn't exisit"
-            self.mean_files = AudioFolder(audio_path=os.path.join(
-                self.data_dir, subset, 'mean'),
+            assert posterior_mean_from in SUPPORTED_POSTERIOR_MEAN_SOURCES, \
+                f"posterior_mean_from='{posterior_mean_from}' is not supported. " \
+                f"Choose from {SUPPORTED_POSTERIOR_MEAN_SOURCES}"
+            self.posterior_mean_from = posterior_mean_from
+            mean_path = os.path.join(self.data_dir, subset, 'mean', posterior_mean_from)
+            assert os.path.exists(mean_path), \
+                f"Fail to load posterior mean from local files. Directory {mean_path} doesn't exist"
+            self.mean_files = AudioFolder(audio_path=mean_path,
                                           sample_rate=self.sample_rate)
 
         self.shuffle_spec = shuffle_spec
@@ -227,7 +233,10 @@ class ComplexSpecDataset(Dataset):
         if self.load_posterior_mean:
             x_star = self.mean_files[i]
 
-        min_len = min(x.size(-1), y.size(-1))
+        if self.load_posterior_mean:
+            min_len = min(x.size(-1), y.size(-1), x_star.size(-1))
+        else:
+            min_len = min(x.size(-1), y.size(-1))
         x, y = x[..., :min_len], y[..., :min_len]
         if self.load_posterior_mean:
             x_star = x_star[..., :min_len]

@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="breadcrumb">
+    <a href="/">Results</a>
+    {% if selected_method %}
+        <span class="sep">/</span>
+        <a href="/method/{{ selected_method }}">{{ selected_method }}</a>
+    {% endif %}
+</div>
+
+{% if not selected_method %}
+    <h1>Results Browser</h1>
+    <h2 style="margin-top: 24px;">Methods</h2>
+    {% if methods %}
+        <div class="grid">
+            {% for m in methods %}
+                <a class="card" href="/method/{{ m }}">
+                    <div class="card-icon">📁</div>
+                    <div class="card-title">{{ m }}</div>
+                </a>
+            {% endfor %}
+        </div>
+    {% else %}
+        <p style="color: var(--text-secondary);">No methods found. Results directory may be empty.</p>
+    {% endif %}
+{% else %}
+    <h1>{{ selected_method }}</h1>
+    <h2 style="margin-top: 24px;">Runs</h2>
+    {% if runs %}
+        <div class="grid">
+            {% for r in runs %}
+                <a class="card" href="/run/{{ selected_method }}/{{ r }}">
+                    <div class="card-icon">🎯</div>
+                    <div class="card-title">{{ r }}</div>
+                </a>
+            {% endfor %}
+        </div>
+    {% else %}
+        <p style="color: var(--text-secondary);">No runs found for this method.</p>
+    {% endif %}
+{% endif %}
+
+{% endblock %}
