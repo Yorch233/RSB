@@ -23,7 +23,7 @@ logger = get_logger(__name__)  # Get logger for this module
 # Import project-specific modules
 from RSB.backbone import BackboneRegister
 from RSB.common.config import Config
-from RSB.dataset.ComplexSpecDatatet import ComplexSpec, STFTUtil
+from RSB.dataset.ComplexSpecDataset import ComplexSpecDataset, STFTUtil
 from RSB.evaluate.registry import MetricRegister
 from RSB.modeling_rsb import RSB  # Assuming the model class is named RSB
 
@@ -228,7 +228,7 @@ class RSB_Trainer():
         Returns:
             torch.utils.data.DataLoader: Configured DataLoader.
         """
-        dataset = ComplexSpec(
+        dataset = ComplexSpecDataset(
             config=self.config,
             dataset=self.config.dataset,
             subset=subset,
@@ -306,6 +306,8 @@ class RSB_Trainer():
         Returns:
             tuple: (total_loss, dict_of_individual_losses)
         """
+        rsb = self.accelerator.unwrap_model(self.RSB)
+
         x0, x1 = batch[0], batch[1]  # x0: clean spec, x1: noisy/terminal spec
 
         # Get x_star (estimated x0) if needed by the training method
@@ -333,13 +335,13 @@ class RSB_Trainer():
                     x_star)  # Add x_star as additional conditioning
 
         # Sample xt from the conditional distribution q(xt|x0, x1)
-        xt = self.RSB.sde.q_sample(t=timestep, x0=x0, x1=x1)
+        xt = rsb.sde.q_sample(t=timestep, x0=x0, x1=x1)
 
         # Forward pass through the RSB generator
         netout = self.RSB(x=xt, t=timestep, cond=condition)
 
         # Compute the target label for training (depends on training_target config)
-        label = self.RSB.sde.compute_label(xt=xt, t=timestep, x0=x0, x1=x1)
+        label = rsb.sde.compute_label(xt=xt, t=timestep, x0=x0, x1=x1)
 
         # --- Compute Losses ---
 
@@ -351,11 +353,11 @@ class RSB_Trainer():
         prediction_loss = torch.mean(
             self._reduce_op(prediction_batch_loss.reshape(
                 prediction_batch_loss.shape[0], -1),
-                            dim=-1) * self.RSB.sde.compute_weight(timestep))
+                            dim=-1) * rsb.sde.compute_weight(timestep))
 
         # 2. Time-domain L1 loss between reconstructed and true audio
         # Reconstruct x0 estimate from network output
-        x0_hat = self.RSB.sde.compute_pred_x0(xt=xt,
+        x0_hat = rsb.sde.compute_pred_x0(xt=xt,
                                               t=timestep,
                                               x1=x1,
                                               net_out=netout)
@@ -574,8 +576,10 @@ def evaluate_metrics(self, subset='valid', n_samples=0, solver='SDE', num_step=5
         Returns:
             dict: Average metric scores.
         """
+        rsb = self.accelerator.unwrap_model(self.RSB)
+
         # Create dataset for raw waveform access (not spectrograms)
-        dataset = ComplexSpec(self.config, dataset=self.config.dataset, subset=subset, return_raw=True)
+        dataset = ComplexSpecDataset(self.config, dataset=self.config.dataset, subset=subset, return_raw=True)
         if n_samples < 1:
             n_samples = len(dataset) # Evaluate all samples
         else:
@@ -592,7 +596,7 @@ def evaluate_metrics(self, subset='valid', n_samples=0, solver='SDE', num_step=5
             x, y = dataset[i] # x: clean wav, y: noisy wav (as tensor)
 
             # Perform sampling/inference using the RSB model
-            x_hat, _, _ = self.RSB.sampling(
+            x_hat, _, _ = rsb.sampling(
                 y, predictive_fn=self.x_star, num_step=num_step, solver=solver
             ) # x_hat: enhanced waveform
 
