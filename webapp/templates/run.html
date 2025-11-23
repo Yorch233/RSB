@@ -1,0 +1,160 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="breadcrumb">
+    <a href="/">Results</a>
+    <span class="sep">/</span>
+    <a href="/method/{{ method }}">{{ method }}</a>
+    <span class="sep">/</span>
+    <span>{{ run_name }}</span>
+</div>
+
+<h1>{{ run_name }}</h1>
+
+<div class="info-box">
+    <div class="info-item">
+        <label>Method</label>
+        <div class="value">{{ method }}</div>
+    </div>
+    <div class="info-item">
+        <label>Run Name</label>
+        <div class="value">{{ run_name }}</div>
+    </div>
+    <div class="info-item">
+        <label>Path</label>
+        <div class="value" style="font-size:0.8rem;word-break:break-all;">{{ run_path }}</div>
+    </div>
+    <div class="info-item">
+        <label>Audio Files</label>
+        <div class="value">{{ total }}</div>
+    </div>
+    <div class="info-item">
+        <label>Metrics</label>
+        <div class="value">
+            {% if metrics.has_metrics %}
+                <span class="badge badge-success">Computed</span>
+            {% else %}
+                <span class="badge badge-warning">Not computed</span>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<div class="section-header">
+    <h2>Audio Files</h2>
+    <span class="count">{{ total }} files &middot; Page {{ page }}/{{ total_pages }}</span>
+</div>
+
+<div class="audio-list">
+    {% for f in audio_files %}
+        {% set idx = (page - 1) * per_page + loop.index %}
+        {% set audio_url = "/audio/" + run_path + "/" + f %}
+        <div class="audio-row">
+            <span class="audio-index">#{{ idx }}</span>
+            <span class="audio-name">{{ f }}</span>
+            <button class="audio-play" data-audio="{{ f }}" onclick="toggleAudio(this, '{{ audio_url }}', '{{ f }}')">▶</button>
+        </div>
+    {% endfor %}
+    {% if not audio_files %}
+        <p style="color: var(--text-secondary); padding: 20px;">No audio files found in this run.</p>
+    {% endif %}
+</div>
+
+{% if total_pages > 1 %}
+<div class="pagination">
+    {% if page > 1 %}
+        <a href="?page=1">&laquo; First</a>
+        <a href="?page={{ page - 1 }}">&lsaquo; Prev</a>
+    {% else %}
+        <span class="disabled">&laquo; First</span>
+        <span class="disabled">&lsaquo; Prev</span>
+    {% endif %}
+
+    {% set start_page = [page - 3, 1] | max %}
+    {% set end_page = [page + 3, total_pages] | min %}
+
+    {% if start_page > 1 %}
+        <span>...</span>
+    {% endif %}
+
+    {% for p in range(start_page, end_page + 1) %}
+        {% if p == page %}
+            <span class="active">{{ p }}</span>
+        {% else %}
+            <a href="?page={{ p }}">{{ p }}</a>
+        {% endif %}
+    {% endfor %}
+
+    {% if end_page < total_pages %}
+        <span>...</span>
+    {% endif %}
+
+    {% if page < total_pages %}
+        <a href="?page={{ page + 1 }}">Next &rsaquo;</a>
+        <a href="?page={{ total_pages }}">Last &raquo;</a>
+    {% else %}
+        <span class="disabled">Next &rsaquo;</span>
+        <span class="disabled">Last &raquo;</span>
+    {% endif %}
+</div>
+{% endif %}
+
+{% if metrics.has_metrics and metrics.summary %}
+<div class="metrics-section">
+    <h2>Average Metrics</h2>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    {% for col in metrics.summary.Metric or metrics.summary.metric or [] %}
+                        <th>{{ col }}</th>
+                    {% endfor %}
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    {% for val in metrics.summary.Mean or metrics.summary.mean or [] %}
+                        <td>{{ "%.4f"|format(val|float) }}</td>
+                    {% endfor %}
+                </tr>
+                <tr style="color: var(--text-secondary); font-size: 0.8rem;">
+                    {% for val in metrics.summary.Std or metrics.summary.std or [] %}
+                        <td>&plusmn;{{ "%.4f"|format(val|float) }}</td>
+                    {% endfor %}
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+
+{% if metrics.columns and metrics.rows %}
+<div class="metrics-section">
+    <div class="section-header">
+        <h2>Per-Audio Metrics</h2>
+        <span class="count">{{ metrics.rows | length }} rows</span>
+    </div>
+    <div class="table-wrap" style="max-height: 600px; overflow-y: auto;">
+        <table>
+            <thead>
+                <tr>
+                    {% for col in metrics.columns %}
+                        <th>{{ col }}</th>
+                    {% endfor %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in metrics.rows %}
+                <tr>
+                    {% for cell in row %}
+                        <td>{{ cell }}</td>
+                    {% endfor %}
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+
+{% endblock %}

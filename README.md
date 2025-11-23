@@ -29,7 +29,7 @@ pip install -r requirements.txt
 ### Configuration
 
 All experiment settings can be adjusted in the YAML files under [config](config/). Before the first run, please be sure to modify and confirm the following in order:
-- **Dataset**: Modify the [dataset.yml](config/dataset.yml) file to list the keys and paths for all datasets. Each path should contain `train`, `valid`, and `test` subdirectories, and each of these subdirectories must further contain `clean` and `noisy` folders storing all audio recordings.
+- **Dataset**: Modify the [dataset.yml](config/dataset.yml) file to list the keys and paths for all datasets. Each path should contain `train`, `valid`, and `test` subdirectories, and each of these subdirectories must further contain `clean` and `noisy` folders storing all audio recordings. When `load_posterior_mean` is enabled, an additional `mean/<source>/` folder is required under each subset, where `<source>` is one of `NCSN++M` (default), `MetricGAN+`, `SEMamba`, or `MP-SENet`, holding the pre-enhanced posterior mean audio corresponding to that predictive model.
 - **Run**: Modify the [default.yml](config/default.yml) file (or copy and inherit from it before making changes) to configure the basic information for the run. Training parameters can also be entered via the run script.
 
 ### Training
@@ -92,6 +92,9 @@ All experiment settings can be adjusted in the YAML files under [config](config/
       *   `score`: Predicts the score function.
       *   `vector`: Predicts a specific vector field (e.g., `x1 - x0`).
   *   `--regularization_weight`: If `--training_method=regularization`, specifies the weight (`quadratic` or `linear`).
+  *   `--posterior_mean_from`: Specifies which predictive model's posterior mean to load when `load_posterior_mean` is enabled. Choices: `NCSN++M` (default), `MetricGAN+`, `SEMamba`, `MP-SENet`. The corresponding audio files must be placed under `{train,valid,test}/mean/<source>/` in the dataset directory.
+  *   `--wechat_notify`: Enable WeChat notifications via AutoDL API (every 10 epochs + start/end).
+  *   `--autodl_token`: AutoDL API token for WeChat notifications.
 
 ### Inference
 

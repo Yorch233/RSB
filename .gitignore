@@ -3,3 +3,9 @@ __pycache__/
 .ipynb_checkpoints/
 wandb/
 *.log
+pretrained_predictive_model/
+.omo/
+output/
+.gradio/
+DisperSE/
+**/__pycache__/

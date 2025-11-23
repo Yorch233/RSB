@@ -9,7 +9,7 @@ from tqdm import tqdm
 from RSB.backbone import BackboneRegister
 from RSB.common.config import Config, read_config_from_yaml
 from RSB.dataset.AudioFolder import AudioFolder
-from RSB.modeling_RSB import RSB
+from RSB.modeling_rsb import RSB
 
 
 def parse_args():
@@ -108,7 +108,7 @@ def run_inference(args):
                  device=device)
     load_model(bridge, os.path.join(args.model_dir, "model.safetensors"))
 
-    if config.training_method not in ['none', 'regulation']:
+    if config.training_method not in ['none', 'regularization']:
         preditive_model = BackboneRegister.fetch(config.predictive_backbone)(
             input_channels=2, discriminative=True)
         predictive_checkpoint_path = os.path.join(

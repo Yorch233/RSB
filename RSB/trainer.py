@@ -5,6 +5,7 @@ import shutil
 import time
 from datetime import datetime
 import torch
+import wandb
 from accelerate import Accelerator, DistributedDataParallelKwargs
 from accelerate.logging import get_logger
 from accelerate.utils import set_seed
@@ -23,7 +24,8 @@ logger = get_logger(__name__)  # Get logger for this module
 # Import project-specific modules
 from RSB.backbone import BackboneRegister
 from RSB.common.config import Config
-from RSB.dataset.ComplexSpecDatatet import ComplexSpec, STFTUtil
+from RSB.common.notifier import WeChatNotifier
+from RSB.dataset.ComplexSpecDatatet import ComplexSpecDataset, STFTUtil
 from RSB.evaluate.registry import MetricRegister
 from RSB.modeling_rsb import RSB  # Assuming the model class is named RSB
 
@@ -116,7 +118,10 @@ class RSB_Trainer():
             self.ema = None
 
         # --- Initialize predictive model (if required by training method) ---
-        if self.config.training_method != 'none':
+        # Only load when posterior mean is NOT pre-computed; otherwise x_star
+        # comes from dataset (batch[2]) and predictive_fn is unused.
+        if self.config.training_method != 'none' and not self.config.get(
+                "load_posterior_mean", True):
             # Fetch the predictive backbone (e.g., for estimating x0 from x1)
             self.preditive_model = BackboneRegister.fetch(
                 self.config.predictive_backbone)(discriminative=True)
@@ -135,6 +140,8 @@ class RSB_Trainer():
             self.preditive_model.load_state_dict(checkpoint)
             self.preditive_model.to(self.device)
             self.preditive_model.eval()  # Set to evaluation mode
+        else:
+            self.preditive_model = None
 
         # --- Setup loss reduction operation ---
         if self.config.get("reduction", 'mean') == 'mean':
@@ -145,6 +152,13 @@ class RSB_Trainer():
 
         # --- Initialize L1 loss function for time-domain loss ---
         self._l1_loss = torch.nn.L1Loss(reduction='sum')
+
+        # --- Initialize WeChat notifier ---
+        self.notifier = WeChatNotifier(
+            token=self.config.get("autodl_token", ""),
+            run_name=self.config.run_name,
+            enabled=self.config.get("wechat_notify", False),
+        )
 
     def save_state(self):
         """
@@ -228,7 +242,7 @@ class RSB_Trainer():
         Returns:
             torch.utils.data.DataLoader: Configured DataLoader.
         """
-        dataset = ComplexSpec(
+        dataset = ComplexSpecDataset(
             config=self.config,
             dataset=self.config.dataset,
             subset=subset,
@@ -237,6 +251,7 @@ class RSB_Trainer():
             return_spec=True,  # Return spectrograms
             # Load pre-computed posterior mean if available
             load_posterior_mean=self.config.get("load_posterior_mean", True),
+            posterior_mean_from=self.config.get("posterior_mean_from", "NCSN++M"),
             dummy=self.config.dummy)  # Use dummy data if specified
 
         dataloader = torch.utils.data.DataLoader(
@@ -274,8 +289,11 @@ class RSB_Trainer():
         Returns:
             torch.Tensor: Weight values, reshaped for broadcasting.
         """
-        if self.config.get("regularization_weight", "quadratic") == 'quadratic':
+        regularization_weight = self.config.get("regularization_weight", "quadratic")
+        if regularization_weight == 'quadratic':
             omega_t = t**2  # Quadratic weighting
+        elif regularization_weight == 'cosine':
+            omega_t = (1 - torch.cos(torch.pi * t)) / 2  # Cosine weighting
         else:
             omega_t = t  # Linear weighting
         # Reshape for broadcasting with spectrogram dimensions (B, C, F, T)
@@ -440,6 +458,11 @@ class RSB_Trainer():
             else:
                 self.config.early_stop_cnt += 1  # Increment counter
 
+            # Track best validation loss
+            avg_valid_loss = valid_loss["total_loss"] / num_valid_steps if num_valid_steps > 0 else 0.0
+            if self.config.best_valid_loss is None or avg_valid_loss < self.config.best_valid_loss:
+                self.config.best_valid_loss = avg_valid_loss
+
         # --- Evaluate on test set (for monitoring, not used for saving) ---
         self.evaluate_metrics(subset='test', n_samples=5, num_step=20)
 
@@ -454,6 +477,20 @@ class RSB_Trainer():
             f"Epoch {epoch} - early_stop_cnt: {self.config.early_stop_cnt}, "
             f"Best PESQ: {self.config.best_pesq:.4f}, Best SI-SDR: {self.config.best_sisdr:.4f}"
         )
+
+        if self.accelerator.is_main_process and epoch % 10 == 0:
+            avg_valid_loss = (
+                valid_loss["total_loss"] / num_valid_steps
+                if num_valid_steps > 0 else 0.0
+            )
+            self.notifier.send_epoch_metrics(
+                epoch=epoch, pesq=pesq_score, sisdr=sisdr_score,
+                valid_loss=avg_valid_loss, best_pesq=self.config.best_pesq,
+                best_sisdr=self.config.best_sisdr,
+                best_valid_loss=self.config.best_valid_loss,
+                early_stop_cnt=self.config.early_stop_cnt,
+                patience=self.config.patience,
+            )
 
     def train_one_epoch(self, epoch, train_dataloader, valid_dataloader):
         """
@@ -521,12 +558,22 @@ class RSB_Trainer():
         # Initialize or load training state variables from config
         self.config.best_pesq = self.config.get("best_pesq", None)
         self.config.best_sisdr = self.config.get("best_sisdr", None)
+        self.config.best_valid_loss = self.config.get("best_valid_loss", None)
         self.config.current_epoch = self.config.get("current_epoch", 0)
         self.config.num_steps = self.config.get("num_steps", 0)
         self.config.early_stop_cnt = self.config.get("early_stop_cnt", 0)
 
         # Print configuration
-        self.config.print()
+        if self.accelerator.is_main_process:
+            self.config.print()
+            self.notifier.send_training_start(
+                dataset=self.config.dataset,
+                bridge_type=self.config.bridge_type,
+                training_method=self.config.training_method,
+                num_epoch=self.config.num_epoch,
+                batch_size=self.config.batch_size,
+                learning_rate=self.config.learning_rate,
+            )
 
         # --- Handle resuming from mid-epoch ---
         if self.config.num_steps > 0:
@@ -552,6 +599,23 @@ class RSB_Trainer():
                 logger.info(
                     f"Early stopping triggered after {self.config.patience} epochs without improvement."
                 )
+                if self.accelerator.is_main_process:
+                    wandb.run.summary["best_checkpoint_path"] = self.output_path
+                    wandb.run.summary["best_pesq"] = self.config.best_pesq
+                    wandb.run.summary["best_sisdr"] = self.config.best_sisdr
+                    artifact = wandb.Artifact(
+                        name=f"best-model-{self.config.run_name}",
+                        type="model",
+                        metadata={"best_pesq": self.config.best_pesq,
+                                  "best_sisdr": self.config.best_sisdr},
+                    )
+                    artifact.add_dir(self.output_path)
+                    wandb.log_artifact(artifact)
+                    self.notifier.send_training_end(
+                        reason="Early Stopping", final_epoch=epoch,
+                        best_pesq=self.config.best_pesq,
+                        best_sisdr=self.config.best_sisdr,
+                    )
                 # Signal to Accelerator to stop (useful in multi-process settings)
                 self.accelerator.set_trigger()
                 if self.accelerator.check_trigger():
@@ -560,8 +624,26 @@ class RSB_Trainer():
         # Finalize training (e.g., close trackers)
         self.accelerator.end_training()
         logger.info("Training completed.")
+        if self.accelerator.is_main_process:
+            wandb.run.summary["best_checkpoint_path"] = self.output_path
+            wandb.run.summary["best_pesq"] = self.config.best_pesq
+            wandb.run.summary["best_sisdr"] = self.config.best_sisdr
+            artifact = wandb.Artifact(
+                name=f"best-model-{self.config.run_name}",
+                type="model",
+                metadata={"best_pesq": self.config.best_pesq,
+                          "best_sisdr": self.config.best_sisdr},
+            )
+            artifact.add_dir(self.output_path)
+            wandb.log_artifact(artifact)
+            self.notifier.send_training_end(
+                reason="Completed", final_epoch=self.config.current_epoch,
+                best_pesq=self.config.best_pesq,
+                best_sisdr=self.config.best_sisdr,
+            )
 
-def evaluate_metrics(self, subset='valid', n_samples=0, solver='SDE', num_step=5):
+    @torch.no_grad()
+    def evaluate_metrics(self, subset='valid', n_samples=0, solver='SDE', num_step=5):
         """
         Evaluates audio quality metrics (PESQ, SI-SDR) on a dataset subset.
 
@@ -575,7 +657,7 @@ def evaluate_metrics(self, subset='valid', n_samples=0, solver='SDE', num_step=5
             dict: Average metric scores.
         """
         # Create dataset for raw waveform access (not spectrograms)
-        dataset = ComplexSpec(self.config, dataset=self.config.dataset, subset=subset, return_raw=True)
+        dataset = ComplexSpecDataset(self.config, dataset=self.config.dataset, subset=subset, return_raw=True)
         if n_samples < 1:
             n_samples = len(dataset) # Evaluate all samples
         else:
