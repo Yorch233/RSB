@@ -6,10 +6,10 @@ from datetime import datetime
 import torch
 from accelerate import Accelerator, DistributedDataParallelKwargs
 from accelerate.logging import get_logger
-from DisperSE.backbone import BackboneRegister
-from DisperSE.common.config import Config, read_config_from_yaml
-from DisperSE.dataset.ComplexSpecDatatet import ComplexSpec, STFTUtil
-from DisperSE.evaluate import MetricRegister
+from RSB.backbone import BackboneRegister
+from RSB.common.config import Config, read_config_from_yaml
+from RSB.dataset.ComplexSpecDatatet import ComplexSpec, STFTUtil
+from RSB.evaluate import MetricRegister
 from tqdm import tqdm
 
 def parse_args():
