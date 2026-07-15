@@ -1,8 +1,5 @@
 inherit: 'data_representation.yml'
 
-datasets:
-  voicebank: '/root/Voicebank+Demand'
-
 normalize_audio: True
 sample_rate: 16000
 audio_length: 16000

@@ -1,1 +1,0 @@
-"""RSB package root."""

@@ -1,1 +1,1 @@
-"""Compatibility package for in-place RSB imports."""
+"""Regularized Schrödinger Bridge for speech enhancement."""

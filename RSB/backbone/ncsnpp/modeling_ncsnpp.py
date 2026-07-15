@@ -53,7 +53,7 @@ class NCSNpp(nn.Module):
         nf=128,
         ch_mult=(1, 2, 2, 2),
         num_res_blocks=1,
-        attn_resolutions=(0, ),
+        attn_resolutions=(0,),
         resamp_with_conv=True,
         conditional=True,
         fir=True,
@@ -86,9 +86,7 @@ class NCSNpp(nn.Module):
         dropout = dropout
         resamp_with_conv = resamp_with_conv
         self.num_resolutions = num_resolutions = len(ch_mult)
-        self.all_resolutions = all_resolutions = [
-            image_size // (2**i) for i in range(num_resolutions)
-        ]
+        self.all_resolutions = all_resolutions = [image_size // (2**i) for i in range(num_resolutions)]
 
         self.discriminative = discriminative
         if self.discriminative:
@@ -118,8 +116,7 @@ class NCSNpp(nn.Module):
         self.spatial_channels = spatial_channels
         self.total_channels = self.input_channels * self.spatial_channels
 
-        self.output_layer = nn.Conv2d(self.total_channels,
-                                      2 * self.spatial_channels, 1)
+        self.output_layer = nn.Conv2d(self.total_channels, 2 * self.spatial_channels, 1)
 
         modules = []
 
@@ -127,9 +124,7 @@ class NCSNpp(nn.Module):
         ### MODULES NATURES ###
         #######################
 
-        AttnBlock = functools.partial(layerspp.AttnBlockpp,
-                                      init_scale=init_scale,
-                                      skip_rescale=skip_rescale)
+        AttnBlock = functools.partial(layerspp.AttnBlockpp, init_scale=init_scale, skip_rescale=skip_rescale)
 
         Upsample = functools.partial(
             layerspp.Upsample,
@@ -139,14 +134,9 @@ class NCSNpp(nn.Module):
         )
 
         if progressive == "output_skip":
-            self.pyramid_upsample = layerspp.Upsample(fir=fir,
-                                                      fir_kernel=fir_kernel,
-                                                      with_conv=False)
+            self.pyramid_upsample = layerspp.Upsample(fir=fir, fir_kernel=fir_kernel, with_conv=False)
         elif progressive == "residual":
-            pyramid_upsample = functools.partial(layerspp.Upsample,
-                                                 fir=fir,
-                                                 fir_kernel=fir_kernel,
-                                                 with_conv=True)
+            pyramid_upsample = functools.partial(layerspp.Upsample, fir=fir, fir_kernel=fir_kernel, with_conv=True)
 
         Downsample = functools.partial(
             layerspp.Downsample,
@@ -156,13 +146,9 @@ class NCSNpp(nn.Module):
         )
 
         if progressive_input == "input_skip":
-            self.pyramid_downsample = layerspp.Downsample(
-                fir=fir, fir_kernel=fir_kernel, with_conv=False)
+            self.pyramid_downsample = layerspp.Downsample(fir=fir, fir_kernel=fir_kernel, with_conv=False)
         elif progressive_input == "residual":
-            pyramid_downsample = functools.partial(layerspp.Downsample,
-                                                   fir=fir,
-                                                   fir_kernel=fir_kernel,
-                                                   with_conv=True)
+            pyramid_downsample = functools.partial(layerspp.Downsample, fir=fir, fir_kernel=fir_kernel, with_conv=True)
 
         if resblock_type == "ddpm":
             ResnetBlock = functools.partial(
@@ -197,9 +183,7 @@ class NCSNpp(nn.Module):
             # Gaussian Fourier features embeddings.
             # assert config.training.continuous, "Fourier features are only used for continuous training."
 
-            modules.append(
-                layerspp.GaussianFourierProjection(embedding_size=nf,
-                                                   scale=fourier_scale))
+            modules.append(layerspp.GaussianFourierProjection(embedding_size=nf, scale=fourier_scale))
             embed_dim = 2 * nf
 
         elif embedding_type == "positional":
@@ -210,12 +194,10 @@ class NCSNpp(nn.Module):
 
         if conditional:
             modules.append(nn.Linear(embed_dim, nf * 4))
-            modules[-1].weight.data = default_initializer()(
-                modules[-1].weight.shape)
+            modules[-1].weight.data = default_initializer()(modules[-1].weight.shape)
             nn.init.zeros_(modules[-1].bias)
             modules.append(nn.Linear(nf * 4, nf * 4))
-            modules[-1].weight.data = default_initializer()(
-                modules[-1].weight.shape)
+            modules[-1].weight.data = default_initializer()(modules[-1].weight.shape)
             nn.init.zeros_(modules[-1].bias)
 
         ##########################
@@ -252,9 +234,7 @@ class NCSNpp(nn.Module):
                         in_ch *= 2
 
                 elif progressive_input == "residual":
-                    modules.append(
-                        pyramid_downsample(in_ch=input_pyramid_ch,
-                                           out_ch=in_ch))
+                    modules.append(pyramid_downsample(in_ch=input_pyramid_ch, out_ch=in_ch))
                     input_pyramid_ch = in_ch
 
                 hs_c.append(in_ch)
@@ -272,11 +252,10 @@ class NCSNpp(nn.Module):
 
         for i_level in reversed(range(num_resolutions)):
             for i_block in range(
-                    num_res_blocks + 1
+                num_res_blocks + 1
             ):  # +1 blocks in upsampling because of skip connection from combiner
                 out_ch = nf * ch_mult[i_level]
-                modules.append(
-                    ResnetBlock(in_ch=in_ch + hs_c.pop(), out_ch=out_ch))
+                modules.append(ResnetBlock(in_ch=in_ch + hs_c.pop(), out_ch=out_ch))
                 in_ch = out_ch
 
             if all_resolutions[i_level] in attn_resolutions:
@@ -290,11 +269,9 @@ class NCSNpp(nn.Module):
                                 num_groups=min(in_ch // 4, 32),
                                 num_channels=in_ch,
                                 eps=1e-6,
-                            ))
-                        modules.append(
-                            conv3x3(in_ch,
-                                    self.total_channels,
-                                    init_scale=init_scale))
+                            )
+                        )
+                        modules.append(conv3x3(in_ch, self.total_channels, init_scale=init_scale))
                         pyramid_ch = self.total_channels
                     elif progressive == "residual":
                         modules.append(
@@ -302,7 +279,8 @@ class NCSNpp(nn.Module):
                                 num_groups=min(in_ch // 4, 32),
                                 num_channels=in_ch,
                                 eps=1e-6,
-                            ))
+                            )
+                        )
                         modules.append(conv3x3(in_ch, in_ch, bias=True))
                         pyramid_ch = in_ch
                     else:
@@ -314,18 +292,19 @@ class NCSNpp(nn.Module):
                                 num_groups=min(in_ch // 4, 32),
                                 num_channels=in_ch,
                                 eps=1e-6,
-                            ))
+                            )
+                        )
                         modules.append(
                             conv3x3(
                                 in_ch,
                                 self.total_channels,
                                 bias=True,
                                 init_scale=init_scale,
-                            ))
+                            )
+                        )
                         pyramid_ch = self.total_channels
                     elif progressive == "residual":
-                        modules.append(
-                            pyramid_upsample(in_ch=pyramid_ch, out_ch=in_ch))
+                        modules.append(pyramid_upsample(in_ch=pyramid_ch, out_ch=in_ch))
                         pyramid_ch = in_ch
                     else:
                         raise ValueError(f"{progressive} is not a valid name")
@@ -339,12 +318,8 @@ class NCSNpp(nn.Module):
         assert not hs_c
 
         if progressive != "output_skip":
-            modules.append(
-                nn.GroupNorm(num_groups=min(in_ch // 4, 32),
-                             num_channels=in_ch,
-                             eps=1e-6))
-            modules.append(
-                conv3x3(in_ch, self.total_channels, init_scale=init_scale))
+            modules.append(nn.GroupNorm(num_groups=min(in_ch // 4, 32), num_channels=in_ch, eps=1e-6))
+            modules.append(conv3x3(in_ch, self.total_channels, init_scale=init_scale))
 
         self.all_modules = nn.ModuleList(modules)
 
@@ -368,17 +343,18 @@ class NCSNpp(nn.Module):
                                 x[:, [chan + in_chan], :, :].imag,
                             ],
                             dim=1,
-                        ) for in_chan in range(self.input_channels // 2)
+                        )
+                        for in_chan in range(self.input_channels // 2)
                     ],
                     dim=1,
-                ))
+                )
+            )
         x = torch.cat(x_chans, dim=1)  # 4*D
 
         if self.embedding_type == "fourier":
             # Gaussian Fourier features embeddings.
             used_sigmas = time_cond
-            temb = (modules[m_idx](torch.log(used_sigmas))
-                    if used_sigmas is not None else None)
+            temb = modules[m_idx](torch.log(used_sigmas)) if used_sigmas is not None else None
             m_idx += 1
 
         elif self.embedding_type == "positional":
@@ -479,8 +455,7 @@ class NCSNpp(nn.Module):
                         pyramid = modules[m_idx](pyramid)
                         m_idx += 1
                     else:
-                        raise ValueError(
-                            f"{self.progressive} is not a valid name.")
+                        raise ValueError(f"{self.progressive} is not a valid name.")
                 else:
                     if self.progressive == "output_skip":
                         pyramid = self.pyramid_upsample(pyramid)
@@ -498,8 +473,7 @@ class NCSNpp(nn.Module):
                             pyramid = pyramid + h
                         h = pyramid
                     else:
-                        raise ValueError(
-                            f"{self.progressive} is not a valid name")
+                        raise ValueError(f"{self.progressive} is not a valid name")
 
             if i_level != 0:
                 if self.resblock_type == "ddpm":
@@ -521,16 +495,13 @@ class NCSNpp(nn.Module):
 
         assert m_idx == len(modules)
         if self.scale_by_sigma:
-            used_sigmas = used_sigmas.reshape(
-                (x.shape[0], *([1] * len(x.shape[1:]))))
+            used_sigmas = used_sigmas.reshape((x.shape[0], *([1] * len(x.shape[1:]))))
             h = h / used_sigmas
 
         # Convert to complex number
         h = self.output_layer(h)  # b,D=1,C_out,T
-        h = torch.reshape(
-            h, (h.size(0), 2, self.spatial_channels, h.size(2), h.size(3)))
-        h = torch.permute(
-            h, (0, 2, 3, 4, 1)).contiguous()  # b,2,D,F,T -> b,D,F,T,2
+        h = torch.reshape(h, (h.size(0), 2, self.spatial_channels, h.size(2), h.size(3)))
+        h = torch.permute(h, (0, 2, 3, 4, 1)).contiguous()  # b,2,D,F,T -> b,D,F,T,2
         h = torch.view_as_complex(h)  # b,D,F,T
         return h
 
@@ -544,7 +515,7 @@ class NCSNppLarge(NCSNpp):
             nf=128,
             ch_mult=(1, 1, 2, 2, 2, 2, 2),
             num_res_blocks=2,
-            attn_resolutions=(16, ),
+            attn_resolutions=(16,),
             **kwargs,
         )
 
@@ -563,7 +534,7 @@ class NCSNpp12M(NCSNpp):
             nf=96,
             ch_mult=(1, 2, 2, 1),
             num_res_blocks=1,
-            attn_resolutions=(0, ),
+            attn_resolutions=(0,),
             **kwargs,
         )
 
@@ -582,7 +553,7 @@ class NCSNpp6M(NCSNpp):
             nf=96,
             ch_mult=(1, 1, 1, 1),
             num_res_blocks=1,
-            attn_resolutions=(0, ),
+            attn_resolutions=(0,),
             **kwargs,
         )
 
@@ -604,7 +575,7 @@ class AutoEncodeNCSNpp(nn.Module):
         nf=128,
         ch_mult=(1, 2, 2, 2),
         num_res_blocks=1,
-        attn_resolutions=(0, ),
+        attn_resolutions=(0,),
         resamp_with_conv=True,
         conditional=True,
         fir=True,
@@ -635,9 +606,7 @@ class AutoEncodeNCSNpp(nn.Module):
         dropout = dropout
         resamp_with_conv = resamp_with_conv
         self.num_resolutions = num_resolutions = len(ch_mult)
-        self.all_resolutions = all_resolutions = [
-            image_size // (2**i) for i in range(num_resolutions)
-        ]
+        self.all_resolutions = all_resolutions = [image_size // (2**i) for i in range(num_resolutions)]
 
         self.discriminative = discriminative
         if self.discriminative:
@@ -645,9 +614,7 @@ class AutoEncodeNCSNpp(nn.Module):
             conditional = False
             scale_by_sigma = False
             print("Running NCSN++ as discriminative backbone")
-            input_channels = (
-                1  # no real or imag here, output of real-valued learnt encoder
-            )
+            input_channels = 1  # no real or imag here, output of real-valued learnt encoder
 
         self.conditional = conditional  # noise-conditional
         self.centered = centered
@@ -698,9 +665,7 @@ class AutoEncodeNCSNpp(nn.Module):
         ### MODULES NATURES ###
         #######################
 
-        AttnBlock = functools.partial(layerspp.AttnBlockpp,
-                                      init_scale=init_scale,
-                                      skip_rescale=skip_rescale)
+        AttnBlock = functools.partial(layerspp.AttnBlockpp, init_scale=init_scale, skip_rescale=skip_rescale)
 
         Upsample = functools.partial(
             layerspp.Upsample,
@@ -710,14 +675,9 @@ class AutoEncodeNCSNpp(nn.Module):
         )
 
         if progressive == "output_skip":
-            self.pyramid_upsample = layerspp.Upsample(fir=fir,
-                                                      fir_kernel=fir_kernel,
-                                                      with_conv=False)
+            self.pyramid_upsample = layerspp.Upsample(fir=fir, fir_kernel=fir_kernel, with_conv=False)
         elif progressive == "residual":
-            pyramid_upsample = functools.partial(layerspp.Upsample,
-                                                 fir=fir,
-                                                 fir_kernel=fir_kernel,
-                                                 with_conv=True)
+            pyramid_upsample = functools.partial(layerspp.Upsample, fir=fir, fir_kernel=fir_kernel, with_conv=True)
 
         Downsample = functools.partial(
             layerspp.Downsample,
@@ -727,13 +687,9 @@ class AutoEncodeNCSNpp(nn.Module):
         )
 
         if progressive_input == "input_skip":
-            self.pyramid_downsample = layerspp.Downsample(
-                fir=fir, fir_kernel=fir_kernel, with_conv=False)
+            self.pyramid_downsample = layerspp.Downsample(fir=fir, fir_kernel=fir_kernel, with_conv=False)
         elif progressive_input == "residual":
-            pyramid_downsample = functools.partial(layerspp.Downsample,
-                                                   fir=fir,
-                                                   fir_kernel=fir_kernel,
-                                                   with_conv=True)
+            pyramid_downsample = functools.partial(layerspp.Downsample, fir=fir, fir_kernel=fir_kernel, with_conv=True)
 
         if resblock_type == "ddpm":
             ResnetBlock = functools.partial(
@@ -768,9 +724,7 @@ class AutoEncodeNCSNpp(nn.Module):
             # Gaussian Fourier features embeddings.
             # assert config.training.continuous, "Fourier features are only used for continuous training."
 
-            modules.append(
-                layerspp.GaussianFourierProjection(embedding_size=nf,
-                                                   scale=fourier_scale))
+            modules.append(layerspp.GaussianFourierProjection(embedding_size=nf, scale=fourier_scale))
             embed_dim = 2 * nf
 
         elif embedding_type == "positional":
@@ -781,12 +735,10 @@ class AutoEncodeNCSNpp(nn.Module):
 
         if conditional:
             modules.append(lnn.Linear(embed_dim, nf * 4, bias=True))
-            modules[-1].weight.data = default_initializer()(
-                modules[-1].weight.shape)
+            modules[-1].weight.data = default_initializer()(modules[-1].weight.shape)
             nn.init.zeros_(modules[-1].bias)
             modules.append(nn.Linear(nf * 4, nf * 4, bias=True))
-            modules[-1].weight.data = default_initializer()(
-                modules[-1].weight.shape)
+            modules[-1].weight.data = default_initializer()(modules[-1].weight.shape)
             nn.init.zeros_(modules[-1].bias)
 
         ##########################
@@ -823,9 +775,7 @@ class AutoEncodeNCSNpp(nn.Module):
                         in_ch *= 2
 
                 elif progressive_input == "residual":
-                    modules.append(
-                        pyramid_downsample(in_ch=input_pyramid_ch,
-                                           out_ch=in_ch))
+                    modules.append(pyramid_downsample(in_ch=input_pyramid_ch, out_ch=in_ch))
                     input_pyramid_ch = in_ch
 
                 hs_c.append(in_ch)
@@ -843,11 +793,10 @@ class AutoEncodeNCSNpp(nn.Module):
 
         for i_level in reversed(range(num_resolutions)):
             for i_block in range(
-                    num_res_blocks + 1
+                num_res_blocks + 1
             ):  # +1 blocks in upsampling because of skip connection from combiner
                 out_ch = nf * ch_mult[i_level]
-                modules.append(
-                    ResnetBlock(in_ch=in_ch + hs_c.pop(), out_ch=out_ch))
+                modules.append(ResnetBlock(in_ch=in_ch + hs_c.pop(), out_ch=out_ch))
                 in_ch = out_ch
 
             if all_resolutions[i_level] in attn_resolutions:
@@ -861,14 +810,16 @@ class AutoEncodeNCSNpp(nn.Module):
                                 num_groups=min(in_ch // 4, 32),
                                 num_channels=in_ch,
                                 eps=1e-6,
-                            ))
+                            )
+                        )
                         modules.append(
                             conv3x3(
                                 in_ch,
                                 self.total_channels,
                                 init_scale=init_scale,
                                 bias=True,
-                            ))
+                            )
+                        )
                         pyramid_ch = self.total_channels
                     elif progressive == "residual":
                         modules.append(
@@ -876,7 +827,8 @@ class AutoEncodeNCSNpp(nn.Module):
                                 num_groups=min(in_ch // 4, 32),
                                 num_channels=in_ch,
                                 eps=1e-6,
-                            ))
+                            )
+                        )
                         modules.append(conv3x3(in_ch, in_ch, bias=True))
                         pyramid_ch = in_ch
                     else:
@@ -888,18 +840,19 @@ class AutoEncodeNCSNpp(nn.Module):
                                 num_groups=min(in_ch // 4, 32),
                                 num_channels=in_ch,
                                 eps=1e-6,
-                            ))
+                            )
+                        )
                         modules.append(
                             conv3x3(
                                 in_ch,
                                 self.total_channels,
                                 bias=True,
                                 init_scale=init_scale,
-                            ))
+                            )
+                        )
                         pyramid_ch = self.total_channels
                     elif progressive == "residual":
-                        modules.append(
-                            pyramid_upsample(in_ch=pyramid_ch, out_ch=in_ch))
+                        modules.append(pyramid_upsample(in_ch=pyramid_ch, out_ch=in_ch))
                         pyramid_ch = in_ch
                     else:
                         raise ValueError(f"{progressive} is not a valid name")
@@ -913,15 +866,8 @@ class AutoEncodeNCSNpp(nn.Module):
         assert not hs_c
 
         if progressive != "output_skip":
-            modules.append(
-                nn.GroupNorm(num_groups=min(in_ch // 4, 32),
-                             num_channels=in_ch,
-                             eps=1e-6))
-            modules.append(
-                conv3x3(in_ch,
-                        self.total_channels,
-                        init_scale=init_scale,
-                        bias=True))
+            modules.append(nn.GroupNorm(num_groups=min(in_ch // 4, 32), num_channels=in_ch, eps=1e-6))
+            modules.append(conv3x3(in_ch, self.total_channels, init_scale=init_scale, bias=True))
 
         self.all_modules = nn.ModuleList(modules)
 
@@ -935,8 +881,7 @@ class AutoEncodeNCSNpp(nn.Module):
         parser.add_argument(
             "--no-mask",
             action="store_true",
-            help=
-            "The network should output a direct estimate, not a mask (for restoration/bwe/plc)",
+            help="The network should output a direct estimate, not a mask (for restoration/bwe/plc)",
         )
         return parser
 
@@ -947,8 +892,7 @@ class AutoEncodeNCSNpp(nn.Module):
         m_idx = 0
 
         T_orig = x_time.size(-1)
-        x = self.encoder(x_time).unsqueeze(
-            1)  # b,1,C_out,T (it is assumed that D=1 for this case)
+        x = self.encoder(x_time).unsqueeze(1)  # b,1,C_out,T (it is assumed that D=1 for this case)
         x = pad_spec(x)
 
         if self.embedding_type == "fourier":
@@ -1057,8 +1001,7 @@ class AutoEncodeNCSNpp(nn.Module):
                         pyramid = modules[m_idx](pyramid)
                         m_idx += 1
                     else:
-                        raise ValueError(
-                            f"{self.progressive} is not a valid name.")
+                        raise ValueError(f"{self.progressive} is not a valid name.")
                 else:
                     if self.progressive == "output_skip":
                         pyramid = self.pyramid_upsample(pyramid)
@@ -1076,8 +1019,7 @@ class AutoEncodeNCSNpp(nn.Module):
                             pyramid = pyramid + h
                         h = pyramid
                     else:
-                        raise ValueError(
-                            f"{self.progressive} is not a valid name")
+                        raise ValueError(f"{self.progressive} is not a valid name")
 
             if i_level != 0:
                 if self.resblock_type == "ddpm":
@@ -1099,8 +1041,7 @@ class AutoEncodeNCSNpp(nn.Module):
 
         assert m_idx == len(modules)
         if self.scale_by_sigma:
-            used_sigmas = used_sigmas.reshape(
-                (x.shape[0], *([1] * len(x.shape[1:]))))
+            used_sigmas = used_sigmas.reshape((x.shape[0], *([1] * len(x.shape[1:]))))
             h = h / used_sigmas
 
         h = self.decoder(h.squeeze(1))  # assume D=1 here --> b,1,T

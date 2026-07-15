@@ -1,133 +1,202 @@
 # Regularized Schrödinger Bridge (RSB)
+
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
+[![Audio Demo](https://img.shields.io/badge/Audio%20Demo-RSB-orange)](https://yorch233.github.io/RSB/)
+[![GitHub](https://img.shields.io/badge/GitHub-Yorch233%2FRSB-black?logo=github)](https://github.com/Yorch233/RSB)
+[![Hugging Face](https://img.shields.io/badge/Hugging%20Face-Yorch233%2FRSB-yellow)](https://huggingface.co/Yorch233/RSB)
 
-Regularized Schrödinger Bridge (RSB) is an extension of SB-based diffusion models tailored for inverse problems. It introduces a novel regularization strategy that mitigates exposure bias and achieves a more favorable balance between perception and distortion.
+Regularized Schrödinger Bridge is a speech-enhancement framework that regularizes Schrödinger Bridge training to
+reduce exposure bias and improve the fidelity–realism tradeoff.
 
-- Official PyTorch implementation of the paper:  
-[Regularized Schrödinger Bridge: Alleviating Distortion and Exposure Bias in Solving Inverse Problems]()
+- Official PyTorch implementation of *Regularized Schrodinger Bridge via Distortion-Perception Perturbation for High-Fidelity Speech Enhancement*.
+- Paper accepted; final link coming soon.
 
-![RSB](asset/RSB_schematic.png)
+![Distortion-perception perturbation](assets/schematic_perturbation.png)
 
-## Project Structure
+*Distortion-perception perturbation interpolates clean targets with offline posterior-mean estimates, producing
+time-varying targets between distortion-optimal fidelity and perceptual realism.*
 
-- [cli](cli/): Command-line scripts for training, inference, and evaluation
-- [config](config/): Configuration files for experiments
-- [RSB](RSB/): Core model, SDE, solver, and training code
-- [pretrained_predictive_model](pretrained_predictive_model/): Pretrained model chekpoint for various datasets
-- [asset](asset/): Figures
+![RSB training and inference](assets/schematic_RSB.png)
 
-## Installation
--  Create a new virtual environment with `Python 3.12` and `Pytorch 2.5.1`.
+*RSB first trains a predictive model, exports posterior means, and then trains a regularized bridge that enhances
+degraded speech through iterative reverse-time sampling.*
 
-- Install dependency:
+## For Human
+
+Copy and paste this prompt to your coding agent (Claude Code, Codex, OpenCode, etc.):
+
 ```bash
-pip install -r requirements.txt
+Install and configure RSB by following the instructions here: https://raw.githubusercontent.com/Yorch233/RSB/refs/heads/main/docs/installation.md)
 ```
 
-## Get Started
+## For Agent
+
+Fetch the installation guide and follow it:
+
+```bash
+curl -s https://raw.githubusercontent.com/Yorch233/RSB/refs/heads/main/docs/installation.md
+```
+
+## Skip This README
+
+We're past the era of reading docs. Just paste this into your agent:
+
+Read this and tell me why it's not just another boilerplate: [README](https://raw.githubusercontent.com/Yorch233/RSB/refs/heads/main/README.md)
+
+## Documentation
+
+- [Installation and runtime configuration](docs/installation.md)
+- [Dataset preparation, registration, and posterior means](docs/datasets.md)
+- [Predictive, SB, and RSB training](docs/training.md)
+- [Predictive and generative inference](docs/inference.md)
+- [Metrics and third-party evaluation](docs/metrics.md)
+
+## Manual Start
+
+Run every command from the repository root. The examples assume the registered dataset ID `voicebank`. Replace all
+paths and generated run names with values for your deployment.
+
+### Virtual environment
+
+#### Step 1 — Create the virtual environment
+
+```bash
+uv sync
+```
+
+`uv sync` creates the project virtual environment from `pyproject.toml`. See the
+[installation guide](docs/installation.md) for host prerequisites and UV installation.
+
+### Data preparation
+
+#### Step 2 — Create or register paired data
+
+RSB expects aligned WAV files under `{train,valid,test}/{clean,noisy}`. You can either download Voicebank+DEMAND and
+arrange it into this layout, or build a paired dataset from separate clean-speech and noise corpora. Supported clean
+sources are WSJ0, VCTK, and TIMIT; supported additive-noise sources are WHAM!, CHiME, and QUT. This work uses WSJ0 as
+the clean corpus and WHAM! as the noise corpus.
+
+Create a WSJ0+WHAM! denoising dataset with the `enhancement` task:
+
+```bash
+uv run rsb dataset create \
+  --task enhancement \
+  --clean wsj0 /path/to/wsj0 \
+  --noise wham /path/to/wham \
+  --output-dir /path/to/wsj0-wham-denoising
+```
+
+Create a reverberation-only dataset with the `dereverberation` task:
+
+```bash
+uv run rsb dataset create \
+  --task dereverberation \
+  --clean wsj0 /path/to/wsj0 \
+  --noise none /path/to/wsj0 \
+  --output-dir /path/to/wsj0-dereverberation
+```
+
+For the reverberation-only command, the path supplied with `--noise none` must exist but its audio is not mixed. See
+the [dataset guide](docs/datasets.md) for the required source layouts, synthesis parameters, and combined-task export.
+
+Register Voicebank+DEMAND or an output directory created above for training:
+
+```bash
+uv run rsb dataset add --id voicebank --path /path/to/Voicebank+Demand --select
+```
+
+Replace the path with `/path/to/wsj0-wham-denoising` or `/path/to/wsj0-dereverberation` when registering a dataset
+created by this project.
 
 ### Configuration
 
-All experiment settings can be adjusted in the YAML files under [config](config/). Before the first run, please be sure to modify and confirm the following in order:
-- **Dataset**: Modify the [dataset.yml](config/dataset.yml) file to list the keys and paths for all datasets. Each path should contain `train`, `valid`, and `test` subdirectories, and each of these subdirectories must further contain `clean` and `noisy` folders storing all audio recordings. When `load_posterior_mean` is enabled, an additional `mean/<source>/` folder is required under each subset, where `<source>` is one of `NCSN++M` (default), `MetricGAN+`, `SEMamba`, or `MP-SENet`, holding the pre-enhanced posterior mean audio corresponding to that predictive model.
-- **Run**: Modify the [default.yml](config/default.yml) file (or copy and inherit from it before making changes) to configure the basic information for the run. Training parameters can also be entered via the run script.
+#### Step 3 — Configure the training environment
+
+```bash
+uv run rsb config
+```
+
+The configuration wizard stores host-specific GPU, precision, logging, checkpoint, dataset, run, and result settings
+in the ignored `.config/rsb.yml`. See the [installation guide](docs/installation.md) for configuration choices.
 
 ### Training
 
-#### Launch with Accelerate
-- Configure the accelerate settings:
-  ```bash
-  accelerate config
-  ```
+#### Step 4 — Train the predictive model
 
-- Train predictive model :
-  ```bash
-  accelerate launch -m cli.train_predictive\
-    --dataset voicebank+demand \
-    --predictive_backbone ncsnpp_base \
-  ```
-  **Arguments for the `train_predictive.py`:**
-    - `--dataset`: Specifies the dataset name (e.g., `voicebank+demand`) to be used for training and validation.  
-    - `--learning_rate`: Sets the initial learning rate for the Adam optimizer used during training.  
-    - `--batch_size`: Defines the number of samples processed per GPU in each training batch.  
-    - `--predictive_backbone`: Specifies the backbone architecture (e.g., `ncsnpp_base`) for the predictive model.  
-    - `--checkpoint_path`: Provides the path to a saved checkpoint directory for resuming training.  
-    - `--patience`: Determines the number of epochs with no validation loss improvement before early stopping is triggered.  
-    - `--log_steps`: Sets the frequency (in optimization steps) at which training loss is logged.  
-    - `--resume`: When used, indicates that training should resume from the state specified in `--checkpoint_path`.
+```bash
+uv run rsb train predictive --dataset voicebank
+```
 
-  Pretrained models for different datasets are available in [pretrained_predictive_model](pretrained_predictive_model/), organized in separate folders by dataset.
+The command creates a `rsb_predictive_MMDDhhmm` run containing resumable Lightning state, `config.yml`, and the best
+validation `model.safetensors`.
 
-- train RSB
-  ```bash
-  accelerate launch -m cli.train \
-    --dataset voicebank+demand \
-    --training_method regularization \
-    --training_target data \
-  ```
-  **Arguments for the `train_rsb.py`:**
+#### Step 5 — Generate offline posterior means
 
-  *   `--seed`: Sets the random seed for reproducibility across runs.
-  *   `--run_name`: (Optional) Specifies a custom name for the training run. If not provided, a name is generated automatically.
-  *   `--bridge_type`: Chooses the type of Schrödinger Bridge: `VP` (Variance Preserving) or `VE` (Variance Exploding).
-  *   `--dataset`: Specifies the dataset name (e.g., `voicebank+demand`) to be used for training and validation. The dataset must be defined in `config/dataset.yml`.
-  *   `--learning_rate`: Sets the initial learning rate for the optimizer (Adam/AdamW).
-  *   `--batch_size`: Defines the number of samples processed per GPU in each training batch.
-  *   `--num_epoch`: Sets the maximum number of training epochs.
-  *   `--run_dir`: Defines the base directory where run outputs (logs, checkpoints) will be saved.
-  *   `--log_steps`: Sets the frequency (in training steps) at which training metrics are logged.
-  *   `--log_with`: Selects the tool for experiment tracking (e.g., `wandb` for Weights & Biases, or `none`).
-  *   `--resume`: Flag to indicate that training should resume from the latest checkpoint found in the specified `--checkpoint_path`.
-  *   `--checkpoint_path`: Path to the checkpoint directory from which to resume training (required if `--resume` is used).
-  *   `--dummy`: (Placeholder/Unused) Flag for potential dummy runs or testing.
-  *   `--training_method`: Specifies the RSB training strategy:
-      *   `none`: Standard training.
-      *   `optimal`: Conditions the model on an optimal path prediction.
-      *   `condition`: Adds the prediction as an additional input condition.
-      *   `optimal&condition`: Combines `optimal` and `condition`.
-      *   `regularization`(default) : Applies our proposed Distortion-Perception regularization during training.
-  *   `--training_target`: Defines the primary target for the training loss:
-      *   `data`(default) : Predicts the clean data directly.
-      *   `noise`: Predicts the noise component.
-      *   `score`: Predicts the score function.
-      *   `vector`: Predicts a specific vector field (e.g., `x1 - x0`).
-  *   `--regularization_weight`: If `--training_method=regularization`, specifies the weight (`quadratic` or `linear`).
-  *   `--posterior_mean_from`: Specifies which predictive model's posterior mean to load when `load_posterior_mean` is enabled. Choices: `NCSN++M` (default), `MetricGAN+`, `SEMamba`, `MP-SENet`. The corresponding audio files must be placed under `{train,valid,test}/mean/<source>/` in the dataset directory.
-  *   `--wechat_notify`: Enable WeChat notifications via AutoDL API (every 10 epochs + start/end).
-  *   `--autodl_token`: AutoDL API token for WeChat notifications.
+```bash
+uv run rsb dataset generate-mean \
+  --run rsb_predictive_MMDDhhmm \
+  --dataset voicebank
+```
 
-### Inference
+This writes posterior means for train, valid, and test below `<dataset>/<split>/mean/NCSN++M/`.
 
-- sampling
-Use the pre-trained model to enhance noisy audio files. Supports both single files and batch processing of entire directories.
+#### Step 6 — Reproduce SB or RSB
 
-    ```bash
-    python -m cli.inference\
-      --audio_path /path/to/your/noisy_audio_folder\
-      --output_dir /path/to/save/enhanced_audio\
-      --model_dir /path/to/run/dir\
-      --num_step 50
-    ```
-  **Arguments for the `inference.py`:**
-  - `--audio_path`: Path to noisy audio files (can be a single file or a folder)
-  - `--output_dir`: Directory to save enhanced audio files
-  - `--model_dir`: Directory containing model weights and configuration files
-  - `--num_step`: Number of sampling steps (higher values generally improve quality but increase processing time) 
+Train vanilla Schrödinger Bridge:
 
-- Calculate metrics:
-Calculate common speech enhancement evaluation metrics such as SI-SNR, PESQ, and STOI to measure enhancement performance.
+```bash
+uv run rsb train generative \
+  --dataset voicebank \
+  --training-method none
+```
 
-  ```bash
-  python -m cli.calc_metric\
-    --clean_dir /path/to/your/clean_audio_folder \
-    --noisy_dir /path/to/your/noisy_audio_folder  \
-    --enhanced_dir /path/to/your/enhanced_audio_folder
-  ```
-  **Arguments for the `calc_metric.py`:**
-  - `--clean_dir`: Directory containing clean speech (ground truth)
-  - `--noisy_dir`: Directory containing noisy speech (for baseline comparison)
-  - `--enhanced_dir`: Directory containing enhanced speech processed by the model
+Train Regularized Schrödinger Bridge:
+
+```bash
+uv run rsb train generative \
+  --dataset voicebank \
+  --training-method regularization \
+  --posterior-mean-from NCSN++M
+```
+
+Reproduction-critical controls:
+
+- `--training-method`: `none` reproduces vanilla SB; `regularization` reproduces RSB and is the default.
+- `--posterior-mean-from`: selects the dataset's `mean/<source>` directory. It defaults to `NCSN++M` for RSB and is
+  not applicable to vanilla SB.
+- `--schedule`: selects `VE` or `VP`; the released configuration defaults to `VE`.
+
+All optimizer, runtime, objective, resume, and distributed options are documented in the [training guide](docs/training.md).
+
+### Inference and evaluation
+
+#### Step 7 — Enhance the test set and calculate metrics
+
+```bash
+uv run rsb inference generative \
+  --run rsb_generative_MMDDhhmm \
+  --dataset voicebank \
+  --sampler SDE \
+  --num-steps 50
+
+uv run rsb metric \
+  --dir results/rsb_generative_MMDDhhmm/SDE_N=50 \
+  --metrics pesq,estoi,si_sdr
+```
+
+For released RSB reproduction, keep `--sampler SDE` and explicitly record `--num-steps`. Omitting `--run` downloads
+the default [`Yorch233/RSB`](https://huggingface.co/Yorch233/RSB) checkpoint. See the [inference guide](docs/inference.md)
+and [metrics guide](docs/metrics.md) for complete options, result layouts, and troubleshooting.
+
+## Citation
+
+If you use RSB in your research, please cite the accompanying paper. The final citation and paper link will be added
+when the publication is available.
+
+## Acknowledgements
+
+We thank the [StoRM](https://github.com/sp-uhh/storm) for providing its scripts for data processing and complex spectrogram feature extraction, which served as references for our implementation.
 
 ## License
 
-This project is licensed under the [Apache License 2.0](LICENSE).
+RSB is licensed under the [Apache License 2.0](LICENSE).

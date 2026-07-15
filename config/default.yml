@@ -1,39 +1,37 @@
-inherit: 'dataset.yml'
-dataset: 'voicebank'
+inherit: "dataset.yml"
+version: "1.0.0"
 
-generative_backbone: 'ncsnpp_base'
-predictive_backbone: 'ncsnpp_base'
+# RSB
+generative_backbone: "ncsnpp_base"
+bridge_type: "VE"
+training_method: "regularization"
+training_target: "data"
 
-bridge_type: 'VE'
-training_method: 'regularization'
-training_target: 'data'
-
+# Shared optimization
 learning_rate: 1.0e-4
 batch_size: 16
-evaluate_batch_size: 16
 patience: 20
+predictive_patience: 50
+mixed_precision: "none"
+logger: "wandb"
 seed: 10
 
 num_epoch: 1000
 ema_rate: 0.999
-optimizer: 'Adam'
-sample_rate: 16000
-reduction: 'sum'
-load_posterior_mean: True
-posterior_mean_from: 'NCSN++M'
-loss_weight_type: 'constant'
-regularization_weight: 'quadratic'
+ema: True
+optimizer: "Adam"
+reduction: "sum"
+
+# Regularized bridge objective
+posterior_mean_from: "NCSN++M"
+loss_weight_type: "constant"
+regularization_weight: "quadratic"
 
 t_min: 1.0e-4
 t_max: 1
-checkpoints_total_limit: 3
 time_loss_weight: 1.0e-3
-log_steps: 10
-save_state_steps: 1000
 
-
-run_dir: '/root/autodl-tmp/runs'
-log_with: 'wandb'
-
-wechat_notify: False
-autodl_token: 'eyJhbGciOiJFUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1aWQiOjM3NDQzNSwidXVpZCI6IjVlZWEzNzg0LWQ0ZjUtNDIyMS04YTFhLTkxMjAyMWQ5NDc4ZiIsImlzX2FkbWluIjpmYWxzZSwiYmFja3N0YWdlX3JvbGUiOiIiLCJpc19zdXBlcl9hZG1pbiI6ZmFsc2UsInN1Yl9uYW1lIjoiIiwidGVuYW50IjoiYXV0b2RsIiwidXBrIjoiIn0.5C06X07zQgpssmwv1CYJLX2XA4IRGCrcmpY9oQ9mPD24dnwdkNsgzQohnWphZPnj_GzcajSHAFDOGoTnYiRg0A'
+# Sampled validation metrics
+valid_metric_samples: 50
+test_metric_samples: 5
+metric_num_steps: 20

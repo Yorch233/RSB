@@ -18,7 +18,7 @@ def unsqueeze_xdim(*args, xdim):
     for z in args:
         if isinstance(z, torch.Tensor):
             # Create indexing tuple like (..., None, None, ...) for xdim length
-            bc_dim = (..., ) + (None, ) * len(xdim)
+            bc_dim = (...,) + (None,) * len(xdim)
             results.append(z[bc_dim])
         elif isinstance(z, (list, tuple)):
             # Recursively apply to elements of lists/tuples
@@ -36,10 +36,7 @@ class SB_SDE:
     used in the RSB (Refined Schrödinger Bridge) model.
     """
 
-    def __init__(self,
-                 training_target="data",
-                 loss_weight_type="constant",
-                 device="cpu"):
+    def __init__(self, training_target="data", loss_weight_type="constant", device="cpu"):
         """
         Initializes the SDE base class.
 
@@ -141,8 +138,7 @@ class SB_SDE:
         Returns:
             torch.Tensor: Sigma_bar squared values at time `t`.
         """
-        return self.marginal_sigma_square(
-            self.T(t)) - self.marginal_sigma_square(t)
+        return self.marginal_sigma_square(self.T(t)) - self.marginal_sigma_square(t)
 
     def q_sample(self, t, x0, x1):
         """
@@ -159,13 +155,14 @@ class SB_SDE:
         """
         _, *xdim = x0.shape
         # Calculate weights and variance for the sampling distribution
-        w_x0 = self.marginal_alpha(t) * self.marginal_sigma_bar_square(
-            t) / self.marginal_sigma_square(self.T(t))
-        w_x1 = self.marginal_alpha_bar(t) * self.marginal_sigma_square(
-            t) / self.marginal_sigma_square(self.T(t))
-        var = self.marginal_alpha(t)**2 * self.marginal_sigma_bar_square(
-            t) * self.marginal_sigma_square(t) / self.marginal_sigma_square(
-                self.T(t))
+        w_x0 = self.marginal_alpha(t) * self.marginal_sigma_bar_square(t) / self.marginal_sigma_square(self.T(t))
+        w_x1 = self.marginal_alpha_bar(t) * self.marginal_sigma_square(t) / self.marginal_sigma_square(self.T(t))
+        var = (
+            self.marginal_alpha(t) ** 2
+            * self.marginal_sigma_bar_square(t)
+            * self.marginal_sigma_square(t)
+            / self.marginal_sigma_square(self.T(t))
+        )
         # Expand dimensions for broadcasting
         w_x0, w_x1, var = unsqueeze_xdim(w_x0, w_x1, var, xdim=xdim)
         # Compute mean and sample
@@ -173,9 +170,7 @@ class SB_SDE:
         x_t = mean + var.sqrt() * torch.randn_like(mean)
         return x_t
 
-    def fisrt_order_sde_sampling(
-            self, xt, x0, t,
-            t_prev):  # Note: Typo in 'fisrt' (should be 'first')
+    def first_order_sde_sampling(self, xt, x0, t, t_prev):
         """
         Performs a first-order Euler-Maruyama step for SDE sampling.
         Computes the previous state x_{t_prev} given the current state xt, initial state x0, and time steps.
@@ -191,14 +186,17 @@ class SB_SDE:
         """
         _, *xdim = x0.shape
         # Calculate weights and variance for the transition
-        w_xt = self.marginal_alpha(t_prev) * self.marginal_sigma_square(
-            t_prev) / (self.marginal_alpha(t) * self.marginal_sigma_square(t))
-        w_x0 = self.marginal_alpha(t_prev) * (
-            1 -
-            self.marginal_sigma_square(t_prev) / self.marginal_sigma_square(t))
-        var = self.marginal_alpha(t_prev)**2 * self.marginal_sigma_square(
-            t_prev) * (1 - self.marginal_sigma_square(t_prev) /
-                       self.marginal_sigma_square(t))
+        w_xt = (
+            self.marginal_alpha(t_prev)
+            * self.marginal_sigma_square(t_prev)
+            / (self.marginal_alpha(t) * self.marginal_sigma_square(t))
+        )
+        w_x0 = self.marginal_alpha(t_prev) * (1 - self.marginal_sigma_square(t_prev) / self.marginal_sigma_square(t))
+        var = (
+            self.marginal_alpha(t_prev) ** 2
+            * self.marginal_sigma_square(t_prev)
+            * (1 - self.marginal_sigma_square(t_prev) / self.marginal_sigma_square(t))
+        )
         # Expand dimensions for broadcasting
         w_x0, w_xt, var = unsqueeze_xdim(w_x0, w_xt, var, xdim=xdim)
         # Compute deterministic part of the update
@@ -208,9 +206,7 @@ class SB_SDE:
             x_prev = x_prev + var.sqrt() * torch.randn_like(x_prev)
         return x_prev
 
-    def fisrt_order_ode_sampling(
-            self, x1, xt, x0, t,
-            t_prev):  # Note: Typo in 'fisrt' (should be 'first')
+    def first_order_ode_sampling(self, x1, xt, x0, t, t_prev):
         """
         Performs a first-order step for ODE sampling.
         Computes the previous state x_{t_prev} given the current state xt, initial state x0, final state x1, and time steps.
@@ -226,21 +222,41 @@ class SB_SDE:
             torch.Tensor: Estimated state x_{t_prev}.
         """
         _, *xdim = x0.shape
-        # Calculate weights for the deterministic ODE flow
-        w_xt = self.marginal_alpha(t_prev) * self.marginal_sigma(
-            t_prev) * self.marginal_sigma_bar(t_prev) / (
-                self.marginal_alpha(t) * self.marginal_sigma_square(t) *
-                self.marginal_sigma_bar(t))
-        w_x0 = self.marginal_alpha(t_prev) * self.marginal_sigma_square(
-            self.T(t)) * (
-                self.marginal_sigma_bar_square(t) -
-                (self.marginal_sigma_bar(t) * self.marginal_sigma(t_prev) *
-                 self.marginal_sigma_bar(t_prev)) / self.marginal_sigma(t))
-        w_x1 = self.marginal_alpha(t_prev) / (self.marginal_alpha(
-            self.T(t)) * self.marginal_sigma_square(self.T(t))) * (
-                self.marginal_sigma_square(t) -
-                (self.marginal_sigma(t) * self.marginal_sigma(t_prev) *
-                 self.marginal_sigma_bar(t_prev)) / self.marginal_sigma_bar(t))
+        terminal_time = self.T(t)
+        alpha_prev = self.marginal_alpha(t_prev)
+        alpha_terminal = self.marginal_alpha(terminal_time)
+        sigma_terminal_square = self.marginal_sigma_square(terminal_time)
+        sigma_prev = self.marginal_sigma(t_prev)
+        sigma_prev_square = self.marginal_sigma_square(t_prev)
+        sigma_bar_prev = self.marginal_sigma_bar(t_prev)
+        sigma_bar_prev_square = self.marginal_sigma_bar_square(t_prev)
+
+        # Table 2 of SB-SE is singular when tau=T because bar_sigma_T=0. Since
+        # the terminal bridge state equals x1, its analytic limit is finite.
+        if torch.equal(t, terminal_time):
+            w_x0 = alpha_prev * sigma_bar_prev_square / sigma_terminal_square
+            w_x1 = alpha_prev * sigma_prev_square / (alpha_terminal * sigma_terminal_square)
+            w_x0, w_x1 = unsqueeze_xdim(w_x0, w_x1, xdim=xdim)
+            return w_x0 * x0 + w_x1 * x1
+
+        alpha_t = self.marginal_alpha(t)
+        sigma_t = self.marginal_sigma(t)
+        sigma_bar_t = self.marginal_sigma_bar(t)
+
+        # Closed-form first-order probability-flow update from Table 2 of
+        # "Schrodinger Bridge for Generative Speech Enhancement". Here t is
+        # the paper's current tau and t_prev is its next (smaller) t.
+        w_xt = alpha_prev * sigma_prev * sigma_bar_prev / (alpha_t * sigma_t * sigma_bar_t)
+        w_x0 = (
+            alpha_prev
+            / sigma_terminal_square
+            * (sigma_bar_prev_square - sigma_bar_t * sigma_prev * sigma_bar_prev / sigma_t)
+        )
+        w_x1 = (
+            alpha_prev
+            / (alpha_terminal * sigma_terminal_square)
+            * (sigma_prev_square - sigma_t * sigma_prev * sigma_bar_prev / sigma_bar_t)
+        )
         # Expand dimensions for broadcasting
         w_x0, w_xt, w_x1 = unsqueeze_xdim(w_x0, w_xt, w_x1, xdim=xdim)
         # Compute the deterministic update
@@ -283,8 +299,7 @@ class SB_SDE:
             assert x1 is not None, "x1 should be provided for vector training target"
             pred_x0 = x1 - net_out
         else:
-            raise NotImplementedError(
-                f"Training target {self.training_target} is not implemented.")
+            raise NotImplementedError(f"Training target {self.training_target} is not implemented.")
         return pred_x0
 
     def compute_weight(self, t):
@@ -298,17 +313,16 @@ class SB_SDE:
             torch.Tensor: Loss weights for each time step.
         """
         if self.training_target == "data":
-            if self.loss_weight_type == 'constant':
+            if self.loss_weight_type == "constant":
                 loss_weight = torch.ones_like(t, device=self.device)
-            elif self.loss_weight_type == 'snr':
+            elif self.loss_weight_type == "snr":
                 # Weight by Signal-to-Noise Ratio
                 loss_weight = torch.exp(self.marginal_logSNR(t))
             elif self.loss_weight_type.startswith("min_snr_"):
                 # Weight by min(SNR, k) to stabilize training
-                k = float(self.loss_weight_type.split('min_snr_')[-1])
+                k = float(self.loss_weight_type.split("min_snr_")[-1])
                 snr = torch.exp(self.marginal_logSNR(t))
-                loss_weight = torch.stack([snr, k * torch.ones_like(t)],
-                                          dim=1).min(dim=1)[0]
+                loss_weight = torch.stack([snr, k * torch.ones_like(t)], dim=1).min(dim=1)[0]
         else:
             # Default constant weight for other targets
             loss_weight = torch.ones_like(t, device=self.device)
@@ -348,8 +362,7 @@ class SB_SDE:
             # Target is the difference between final and initial states
             label = x1 - x0
         else:
-            raise NotImplementedError(
-                f"Training target {self.training_target} is not implemented.")
+            raise NotImplementedError(f"Training target {self.training_target} is not implemented.")
         return label
 
     def get_sde_solver(self, model_fn):
@@ -387,13 +400,7 @@ class SB_VPSDE(SB_SDE):
     but the total variance remains controlled.
     """
 
-    def __init__(self,
-                 beta0=0.01,
-                 beta1=20,
-                 c=0.3,
-                 training_target="data",
-                 loss_weight_type="constant",
-                 device="cpu"):
+    def __init__(self, beta0=0.01, beta1=20, c=0.3, training_target="data", loss_weight_type="constant", device="cpu"):
         """
         Initializes the VP-SDE with specific parameters.
 
@@ -424,8 +431,7 @@ class SB_VPSDE(SB_SDE):
         Returns:
             torch.Tensor: Alpha values.
         """
-        return torch.exp(-0.5 * (self.beta0 * t + 0.5 *
-                                 (self.beta1 - self.beta0) * t**2))
+        return torch.exp(-0.5 * (self.beta0 * t + 0.5 * (self.beta1 - self.beta0) * t**2))
 
     def marginal_sigma_square(self, t):
         """
@@ -437,8 +443,7 @@ class SB_VPSDE(SB_SDE):
         Returns:
             torch.Tensor: Sigma squared values.
         """
-        return self.c * torch.expm1(self.beta0 * t + 0.5 *
-                                    (self.beta1 - self.beta0) * t**2)
+        return self.c * torch.expm1(self.beta0 * t + 0.5 * (self.beta1 - self.beta0) * t**2)
 
 
 class SB_VESDE(SB_SDE):
@@ -448,12 +453,7 @@ class SB_VESDE(SB_SDE):
     and the noise level sigma(t) grows exponentially over time.
     """
 
-    def __init__(self,
-                 c=0.4,
-                 k=2.6,
-                 training_target="data",
-                 loss_weight_type="constant",
-                 device="cpu"):
+    def __init__(self, c=0.4, k=2.6, training_target="data", loss_weight_type="constant", device="cpu"):
         """
         Initializes the VE-SDE with specific parameters.
 
@@ -464,9 +464,7 @@ class SB_VESDE(SB_SDE):
             loss_weight_type (str): Loss weighting type (passed to base class).
             device (str): Computation device (passed to base class).
         """
-        super().__init__(training_target=training_target,
-                         loss_weight_type=loss_weight_type,
-                         device=device)
+        super().__init__(training_target=training_target, loss_weight_type=loss_weight_type, device=device)
         self.k = torch.tensor(k).to(self.device)
         self.c = torch.tensor(c).to(self.device)
 
@@ -492,4 +490,4 @@ class SB_VESDE(SB_SDE):
         Returns:
             torch.Tensor: Sigma squared values.
         """
-        return self.c * (self.k**(2 * t) - 1) / (2 * torch.log(self.k))
+        return self.c * (self.k ** (2 * t) - 1) / (2 * torch.log(self.k))

@@ -22,15 +22,15 @@ class Conv2d(nn.Module):
     """Conv2d layer with optimal upsampling and downsampling (StyleGAN2)."""
 
     def __init__(
-            self,
-            in_ch,
-            out_ch,
-            kernel,
-            up=False,
-            down=False,
-            resample_kernel=(1, 3, 3, 1),
-            use_bias=True,
-            kernel_init=None,
+        self,
+        in_ch,
+        out_ch,
+        kernel,
+        up=False,
+        down=False,
+        resample_kernel=(1, 3, 3, 1),
+        use_bias=True,
+        kernel_init=None,
     ):
         super().__init__()
         assert not (up and down)
@@ -136,11 +136,7 @@ def upsample_conv_2d(x, w, k=None, factor=2, gain=1):
     w = w[..., ::-1, ::-1].permute(0, 2, 1, 3, 4)
     w = torch.reshape(w, (num_groups * inC, -1, convH, convW))
 
-    x = F.conv_transpose2d(x,
-                           w,
-                           stride=stride,
-                           output_padding=output_padding,
-                           padding=0)
+    x = F.conv_transpose2d(x, w, stride=stride, output_padding=output_padding, padding=0)
     ## Original TF code.
     # x = tf.nn.conv2d_transpose(
     #     x,
@@ -151,9 +147,7 @@ def upsample_conv_2d(x, w, k=None, factor=2, gain=1):
     #     data_format=data_format)
     ## JAX equivalent
 
-    return upfirdn2d(x,
-                     torch.tensor(k, device=x.device),
-                     pad=((p + 1) // 2 + factor - 1, p // 2 + 1))
+    return upfirdn2d(x, torch.tensor(k, device=x.device), pad=((p + 1) // 2 + factor - 1, p // 2 + 1))
 
 
 def conv_downsample_2d(x, w, k=None, factor=2, gain=1):
@@ -188,9 +182,7 @@ def conv_downsample_2d(x, w, k=None, factor=2, gain=1):
     k = _setup_kernel(k) * gain
     p = (k.shape[0] - factor) + (convW - 1)
     s = [factor, factor]
-    x = upfirdn2d(x,
-                  torch.tensor(k, device=x.device),
-                  pad=((p + 1) // 2, p // 2))
+    x = upfirdn2d(x, torch.tensor(k, device=x.device), pad=((p + 1) // 2, p // 2))
     return F.conv2d(x, w, stride=s, padding=0)
 
 
