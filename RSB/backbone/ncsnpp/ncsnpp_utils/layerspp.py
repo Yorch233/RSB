@@ -15,6 +15,7 @@
 
 # pylint: skip-file
 """Layers for defining NCSN++."""
+
 import numpy as np
 import torch
 import torch.nn as nn
@@ -33,8 +34,7 @@ class GaussianFourierProjection(nn.Module):
 
     def __init__(self, embedding_size=256, scale=1.0):
         super().__init__()
-        self.W = nn.Parameter(torch.randn(embedding_size) * scale,
-                              requires_grad=False)
+        self.W = nn.Parameter(torch.randn(embedding_size) * scale, requires_grad=False)
 
     def forward(self, x):
         x_proj = x[:, None] * self.W[None, :] * 2 * np.pi
@@ -64,9 +64,7 @@ class AttnBlockpp(nn.Module):
 
     def __init__(self, channels, skip_rescale=False, init_scale=0.0):
         super().__init__()
-        self.GroupNorm_0 = nn.GroupNorm(num_groups=min(channels // 4, 32),
-                                        num_channels=channels,
-                                        eps=1e-6)
+        self.GroupNorm_0 = nn.GroupNorm(num_groups=min(channels // 4, 32), num_channels=channels, eps=1e-6)
         self.NIN_0 = NIN(channels, channels)
         self.NIN_1 = NIN(channels, channels)
         self.NIN_2 = NIN(channels, channels)
@@ -80,7 +78,7 @@ class AttnBlockpp(nn.Module):
         k = self.NIN_1(h)
         v = self.NIN_2(h)
 
-        w = torch.einsum("bchw,bcij->bhwij", q, k) * (int(C)**(-0.5))
+        w = torch.einsum("bchw,bcij->bhwij", q, k) * (int(C) ** (-0.5))
         w = torch.reshape(w, (B, H, W, H * W))
         w = F.softmax(w, dim=-1)
         w = torch.reshape(w, (B, H, W, H, W))
@@ -93,14 +91,13 @@ class AttnBlockpp(nn.Module):
 
 
 class Upsample(nn.Module):
-
     def __init__(
-            self,
-            in_ch=None,
-            out_ch=None,
-            with_conv=False,
-            fir=False,
-            fir_kernel=(1, 3, 3, 1),
+        self,
+        in_ch=None,
+        out_ch=None,
+        with_conv=False,
+        fir=False,
+        fir_kernel=(1, 3, 3, 1),
     ):
         super().__init__()
         out_ch = out_ch if out_ch else in_ch
@@ -131,9 +128,7 @@ class Upsample(nn.Module):
                 h = self.Conv_0(h)
         else:
             if not self.with_conv:
-                h = up_or_down_sampling.upsample_2d(x,
-                                                    self.fir_kernel,
-                                                    factor=2)
+                h = up_or_down_sampling.upsample_2d(x, self.fir_kernel, factor=2)
             else:
                 h = self.Conv2d_0(x)
 
@@ -141,14 +136,13 @@ class Upsample(nn.Module):
 
 
 class Downsample(nn.Module):
-
     def __init__(
-            self,
-            in_ch=None,
-            out_ch=None,
-            with_conv=False,
-            fir=False,
-            fir_kernel=(1, 3, 3, 1),
+        self,
+        in_ch=None,
+        out_ch=None,
+        with_conv=False,
+        fir=False,
+        fir_kernel=(1, 3, 3, 1),
     ):
         super().__init__()
         out_ch = out_ch if out_ch else in_ch
@@ -181,9 +175,7 @@ class Downsample(nn.Module):
                 x = F.avg_pool2d(x, 2, stride=2)
         else:
             if not self.with_conv:
-                x = up_or_down_sampling.downsample_2d(x,
-                                                      self.fir_kernel,
-                                                      factor=2)
+                x = up_or_down_sampling.downsample_2d(x, self.fir_kernel, factor=2)
             else:
                 x = self.Conv2d_0(x)
 
@@ -206,18 +198,13 @@ class ResnetBlockDDPMpp(nn.Module):
     ):
         super().__init__()
         out_ch = out_ch if out_ch else in_ch
-        self.GroupNorm_0 = nn.GroupNorm(num_groups=min(in_ch // 4, 32),
-                                        num_channels=in_ch,
-                                        eps=1e-6)
+        self.GroupNorm_0 = nn.GroupNorm(num_groups=min(in_ch // 4, 32), num_channels=in_ch, eps=1e-6)
         self.Conv_0 = conv3x3(in_ch, out_ch)
         if temb_dim is not None:
             self.Dense_0 = nn.Linear(temb_dim, out_ch)
-            self.Dense_0.weight.data = default_init()(
-                self.Dense_0.weight.data.shape)
+            self.Dense_0.weight.data = default_init()(self.Dense_0.weight.data.shape)
             nn.init.zeros_(self.Dense_0.bias)
-        self.GroupNorm_1 = nn.GroupNorm(num_groups=min(out_ch // 4, 32),
-                                        num_channels=out_ch,
-                                        eps=1e-6)
+        self.GroupNorm_1 = nn.GroupNorm(num_groups=min(out_ch // 4, 32), num_channels=out_ch, eps=1e-6)
         self.Dropout_0 = nn.Dropout(dropout)
         self.Conv_1 = conv3x3(out_ch, out_ch, init_scale=init_scale)
         if in_ch != out_ch:
@@ -251,27 +238,24 @@ class ResnetBlockDDPMpp(nn.Module):
 
 
 class ResnetBlockBigGANpp(nn.Module):
-
     def __init__(
-            self,
-            act,
-            in_ch,
-            out_ch=None,
-            temb_dim=None,
-            up=False,
-            down=False,
-            dropout=0.1,
-            fir=False,
-            fir_kernel=(1, 3, 3, 1),
-            skip_rescale=True,
-            init_scale=0.0,
+        self,
+        act,
+        in_ch,
+        out_ch=None,
+        temb_dim=None,
+        up=False,
+        down=False,
+        dropout=0.1,
+        fir=False,
+        fir_kernel=(1, 3, 3, 1),
+        skip_rescale=True,
+        init_scale=0.0,
     ):
         super().__init__()
 
         out_ch = out_ch if out_ch else in_ch
-        self.GroupNorm_0 = nn.GroupNorm(num_groups=min(in_ch // 4, 32),
-                                        num_channels=in_ch,
-                                        eps=1e-6)
+        self.GroupNorm_0 = nn.GroupNorm(num_groups=min(in_ch // 4, 32), num_channels=in_ch, eps=1e-6)
         self.up = up
         self.down = down
         self.fir = fir
@@ -280,13 +264,10 @@ class ResnetBlockBigGANpp(nn.Module):
         self.Conv_0 = conv3x3(in_ch, out_ch)
         if temb_dim is not None:
             self.Dense_0 = nn.Linear(temb_dim, out_ch)
-            self.Dense_0.weight.data = default_init()(
-                self.Dense_0.weight.shape)
+            self.Dense_0.weight.data = default_init()(self.Dense_0.weight.shape)
             nn.init.zeros_(self.Dense_0.bias)
 
-        self.GroupNorm_1 = nn.GroupNorm(num_groups=min(out_ch // 4, 32),
-                                        num_channels=out_ch,
-                                        eps=1e-6)
+        self.GroupNorm_1 = nn.GroupNorm(num_groups=min(out_ch // 4, 32), num_channels=out_ch, eps=1e-6)
         self.Dropout_0 = nn.Dropout(dropout)
         self.Conv_1 = conv3x3(out_ch, out_ch, init_scale=init_scale)
         if in_ch != out_ch or up or down:
@@ -302,23 +283,15 @@ class ResnetBlockBigGANpp(nn.Module):
 
         if self.up:
             if self.fir:
-                h = up_or_down_sampling.upsample_2d(h,
-                                                    self.fir_kernel,
-                                                    factor=2)
-                x = up_or_down_sampling.upsample_2d(x,
-                                                    self.fir_kernel,
-                                                    factor=2)
+                h = up_or_down_sampling.upsample_2d(h, self.fir_kernel, factor=2)
+                x = up_or_down_sampling.upsample_2d(x, self.fir_kernel, factor=2)
             else:
                 h = up_or_down_sampling.naive_upsample_2d(h, factor=2)
                 x = up_or_down_sampling.naive_upsample_2d(x, factor=2)
         elif self.down:
             if self.fir:
-                h = up_or_down_sampling.downsample_2d(h,
-                                                      self.fir_kernel,
-                                                      factor=2)
-                x = up_or_down_sampling.downsample_2d(x,
-                                                      self.fir_kernel,
-                                                      factor=2)
+                h = up_or_down_sampling.downsample_2d(h, self.fir_kernel, factor=2)
+                x = up_or_down_sampling.downsample_2d(x, self.fir_kernel, factor=2)
             else:
                 h = up_or_down_sampling.naive_downsample_2d(h, factor=2)
                 x = up_or_down_sampling.naive_downsample_2d(x, factor=2)

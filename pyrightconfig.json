@@ -1,9 +1,0 @@
-{
-  "include": ["."],
-  "executionEnvironments": [
-    {
-      "root": ".",
-      "extraPaths": ["/root/autodl-fs/papers/AAAI2026_RSB"]
-    }
-  ]
-}

@@ -1,86 +1,173 @@
-# RSB - Regularized Schrödinger Bridge
+# RSB Deployment Agent Guide
 
-Research codebase for speech enhancement using Schrödinger Bridge diffusion models.
-Python 3.12 + PyTorch 2.5.1. No package manager, no tests, no linter.
+RSB is the official PyTorch implementation of Regularized Schrodinger Bridge for speech enhancement. This file tells
+an execution agent how to install, configure, train, infer, and evaluate the project on behalf of a human operator.
+Treat [`README.md`](README.md) as the human overview and the files below as the command references:
 
-## Setup
+- [`docs/installation.md`](docs/installation.md): host requirements, environment creation, configuration, and checks
+- [`docs/datasets.md`](docs/datasets.md): paired dataset creation, registry management, and posterior means
+- [`docs/training.md`](docs/training.md): predictive training, vanilla SB, RSB, resume, and run artifacts
+- [`docs/inference.md`](docs/inference.md): predictive/generative inference, Hugging Face loading, and manifests
+- [`docs/metrics.md`](docs/metrics.md): run-linked and third-party evaluation
+
+Preserve the `For Human`, `For Agent`, and `Skip This README` hand-off prompts in `README.md`.
+
+## Deployment objective
+
+The standard deployment produces an auditable sequence of versioned artifacts:
+
+```text
+paired dataset
+  → predictive run
+  → offline posterior means
+  → vanilla SB or regularized RSB run
+  → manifested inference WAVs
+  → per-file and aggregate metrics
+```
+
+Do not skip artifact-producing stages by copying untracked files into run or result directories. Use the CLI so every
+checkpoint, posterior-mean set, inference result, and metric output retains its provenance.
+
+## Host and environment rules
+
+- Run commands from the repository root.
+- Use Python 3.12 and UV; create the environment with `uv sync`.
+- Torch and Torchaudio must be version 2.5.1 or later.
+- Training requires a CUDA-capable deployment host. Metric-only work can run without CUDA.
+- NCSN++ first attempts its optimized CUDA JIT operators. If they are unavailable, explain the throughput trade-off
+  and ask whether to use the portable PyTorch autograd backend; Yes is the default.
+- Training prints the effective parameters and asks for confirmation. Use `--yes` only when the human has reviewed
+  the complete non-interactive job configuration.
+- Never write credentials, remote host details, machine paths, dataset paths, checkpoints, generated audio, or tokens
+  into tracked files.
+
+## Dataset contract
+
+A registered dataset root must contain:
+
+```text
+train/{clean,noisy}/*.wav
+valid/{clean,noisy}/*.wav
+test/{clean,noisy}/*.wav
+```
+
+Clean and noisy filenames must match within each split. RSB additionally requires
+`<split>/mean/<source>/*.wav` to match the corresponding clean filenames and count for train, valid, and test.
+Registration stores only the dataset ID and path and must never copy, modify, or delete the source dataset.
+
+## Configure the deployment
 
 ```bash
-pip install -r requirements.txt  # requirements.txt not in repo; use wandb/*/files/requirements.txt as reference
-accelerate config  # configure distributed training before first run
+uv sync
+uv run rsb dataset add --id voicebank --path /path/to/dataset --select
+uv run rsb config
 ```
 
-Key dependencies: `accelerate`, `torch`, `torchaudio`, `wandb`, `pesq`, `pystoi`, `safetensors`, `huggingface_hub`.
+`rsb config` writes ignored host settings to `.config/rsb.yml`: dataset registry and selection, precision, GPU mode
+and IDs, logger, logging/checkpoint intervals, and run/result roots. Use the project default path. Before continuing,
+confirm that `uv run rsb dataset list` shows the intended selected dataset.
 
-## Commands
+Tracked configuration inheritance is:
 
-All training uses `accelerate launch`. Inference and metrics use `python -m`.
+```text
+config/data_representation.yml
+  └─ config/dataset.yml
+       └─ config/default.yml
+            └─ .config/rsb.yml
+```
+
+`config/default.yml` is the generative training default and must not be treated as a predictive-run configuration.
+Predictive runs derive and persist their method and concrete backbone when the run is created.
+
+## Execute the training sequence
+
+Train the predictive model:
 
 ```bash
-# Train RSB model
-accelerate launch -m cli.train --dataset voicebank+demand --training_method regularization --training_target data
-
-# Train predictive model (prerequisite for RSB)
-accelerate launch -m cli.train_predictive --dataset voicebank+demand --predictive_backbone ncsnpp_base
-
-# Inference
-python -m cli.inference --audio_path /path/to/noisy --output_dir /path/to/output --model_dir /path/to/run/dir --num_step 50
-
-# Evaluate metrics
-python -m cli.calc_metric --clean_dir /path/to/clean --noisy_dir /path/to/noisy --enhanced_dir /path/to/enhanced
+uv run rsb train predictive --dataset voicebank
 ```
 
-## Configuration
+Record the generated `rsb_predictive_MMDDhhmm` name, then generate all posterior-mean splits:
 
-YAML files in `config/` use inheritance: `data_representation.yml` -> `dataset.yml` -> `default.yml`.
-Override via CLI args or create new YAML inheriting from `default.yml`.
-
-Must edit before first run:
-- `config/dataset.yml`: dataset paths (each needs `train/{clean,noisy}`, `valid/{clean,noisy}`, `test/{clean,noisy}`)
-- `config/default.yml`: `run_dir`, `log_with`, training hyperparameters
-
-## Architecture
-
-```
-cli/               # Entry points (train, inference, calc_metric)
-RSB/
-  modeling_rsb.py  # RSB model class (main model)
-  sdes.py          # Schrödinger Bridge SDEs (SB_VESDE, SB_VPSDE)
-  solver.py        # SDE/ODE numerical solvers
-  trainer.py       # Training loop (RSB_Trainer)
-  common/
-    config.py      # Config loader with YAML inheritance
-    register.py    # Registry pattern (Register class)
-    notifier.py    # WeChat notification via AutoDL
-  backbone/
-    registry.py    # BackboneRegister
-    ncsnpp/        # NCSN++ backbone (default: ncsnpp_base)
-  dataset/
-    ComplexSpecDataset.py  # STFT-based dataset, STFTUtil singleton
-    AudioFolder.py         # Audio file loading
-  evaluate/
-    registry.py    # MetricRegister
-    metrics.py     # PESQ, ESTOI, SI-SNR, DNSMOS, etc.
-config/            # YAML configs with inheritance
-pretrained_predictive_model/  # Checkpoints organized by dataset name
+```bash
+uv run rsb dataset generate-mean \
+  --run rsb_predictive_MMDDhhmm \
+  --dataset voicebank
 ```
 
-## Key Patterns
+For vanilla Schrödinger Bridge:
 
-- **Registry**: `BackboneRegister.register("name")` and `MetricRegister.register("name")` decorators. Fetch with `BackboneRegister.fetch("name")`.
-- **STFTUtil**: Class-level singleton. Must call `STFTUtil.initial()` before use (auto-called on first dataset load). Parameters in `config/data_representation.yml`.
-- **Config**: `read_config_from_yaml(path)` returns `Config` object. Supports `inherit` key for YAML chaining.
-- **SDE types**: `VE` (Variance Exploding, default) and `VP` (Variance Preserving).
-- **Training methods**: `none`, `optimal`, `condition`, `optimal&condition`, `regularization` (default, proposed method).
-- **Training targets**: `data` (default), `noise`, `score`, `vector`.
-- **Posterior mean**: When `load_posterior_mean=True`, expects `mean/<source>/` folders in dataset dirs. Sources: `NCSN++M`, `MetricGAN+`, `SEMamba`, `MP-SENet`.
+```bash
+uv run rsb train generative \
+  --dataset voicebank \
+  --training-method none
+```
 
-## Gotchas
+For Regularized Schrödinger Bridge:
 
-- No `requirements.txt` at repo root. Check `wandb/run-*/files/requirements.txt` for pinned versions.
-- `run_dir` defaults to `/root/autodl-tmp/runs` (AutoDL cloud path). Change for local runs.
-- Config has `autodl_token` and `wechat_notify` fields for AutoDL cloud integration - ignore locally.
-- NCSN++ backbone pads spectrogram length to multiple of 64 (`pad_spec` in `modeling_ncsnpp.py:35`).
-- `cli/inference.py` imports `from RSB.modeling_RSB import RSB` (capital RSB) but file is `modeling_rsb.py` - case-sensitive filesystems will break.
-- wandb run IDs follow pattern `abc` + `MMDDHHmmSS`.
-- Checkpoints saved every `save_state_steps` (default 1000) steps, with `checkpoints_total_limit` (default 3) kept.
+```bash
+uv run rsb train generative \
+  --dataset voicebank \
+  --training-method regularization \
+  --posterior-mean-from NCSN++M
+```
+
+Only `none` and `regularization` are valid training methods. `none` does not use posterior means. `regularization`
+defaults to `NCSN++M` and must validate every mean split before a run is created. Do not invent a latest-run selection;
+capture and reuse the exact run name printed by each command.
+
+## Execute inference and metrics
+
+```bash
+uv run rsb inference generative \
+  --run rsb_generative_MMDDhhmm \
+  --dataset voicebank \
+  --sampler SDE \
+  --num-steps 50
+
+uv run rsb metric \
+  --dir results/rsb_generative_MMDDhhmm/SDE_N=50 \
+  --metrics pesq,estoi,si_sdr
+```
+
+For reproducibility, report the run, dataset ID, split, sampler, step count, skip type, seed, model hash, and output
+directory. When `--run` is omitted, generative inference materializes the default
+[`Yorch233/RSB`](https://huggingface.co/Yorch233/RSB) checkpoint. Do not imply that another local run was used.
+
+Use `rsb metric --run RUN --result VARIANT` when selecting among multiple manifested results. Use aligned
+`--clean/--noisy/--enhanced` directories only for third-party evaluation.
+
+## Artifact acceptance checks
+
+A completed training run must contain:
+
+```text
+runs/<run-name>/
+  config.yml
+  model.safetensors
+  checkpoints/last.ckpt
+```
+
+Intermediate `checkpoints/step=*.ckpt` files may also be present. `model.safetensors` is the validation-selected
+inference model; `last.ckpt` is the complete resumable Lightning state.
+
+A completed inference result must contain `inference.json` and exactly the expected WAV filename set. A completed
+evaluation must contain both `metrics.csv` and `metrics.json` in the selected result directory.
+
+New runs use `version: 1.0.0`. Legacy `0.1.0` and unversioned configurations are migrated in memory during loading;
+do not rewrite the source checkpoint merely to make inference work.
+
+## Deployment reporting
+
+When handing the result back to the human, state:
+
+1. the registered dataset ID and split used;
+2. the exact predictive and/or generative run names;
+3. whether CUDA JIT or portable PyTorch operators were selected;
+4. the sampler, step count, skip type, and seed for generative inference;
+5. the run, result, checkpoint, manifest, and metric artifact paths;
+6. any skipped stage, fallback, warning, or incomplete artifact.
+
+Do not report a deployment as complete when a required manifest, checkpoint, posterior-mean split, WAV, or metrics
+file is missing. Consult the troubleshooting section of the corresponding deployment guide before changing command
+parameters or overwriting artifacts.

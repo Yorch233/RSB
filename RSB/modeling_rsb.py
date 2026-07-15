@@ -1,171 +1,229 @@
-# RSB/modeling_rsb.py
-import os
+"""Core Regularized Schrodinger Bridge model and sampling interface."""
+
+from __future__ import annotations
+
+from collections.abc import Sequence
+from pathlib import Path
+from typing import Any, Literal, Self
 
 import torch
 from huggingface_hub import PyTorchModelHubMixin
 from safetensors.torch import load_model
-from torch import nn
+from torch import Tensor, nn
 
 from RSB.backbone import BackboneRegister
-from RSB.common.config import Config, read_config_from_yaml
-from RSB.dataset.ComplexSpecDatatet import STFTUtil
+from RSB.data import STFTUtil
 from RSB.sdes import SB_VESDE, SB_VPSDE
+from RSB.solver import ODESolver, SDESolver
+from RSB.utils.config import read_config_from_yaml
+
+SolverName = Literal["SDE", "ODE"]
+SUPPORTED_TRAINING_METHODS = frozenset({"none", "regularization"})
 
 
-class RSB(nn.Module):
+def validate_training_method(training_method: str) -> None:
+    """Require one of the training methods supported by the released model."""
+    if training_method not in SUPPORTED_TRAINING_METHODS:
+        choices = ", ".join(sorted(SUPPORTED_TRAINING_METHODS))
+        raise ValueError(f"training_method must be one of: {choices}")
+
+
+class RSB(
+    nn.Module,
+    PyTorchModelHubMixin,
+    library_name="regularized-schrodinger-bridge",
+    repo_url="https://github.com/Yorch233/RSB",
+    tags=["audio", "speech-enhancement", "schrodinger-bridge"],
+):
+    """Regularized Schrodinger Bridge model for speech enhancement.
+
+    The Hugging Face mixin provides ``save_pretrained`` and ``from_pretrained``;
+    weights are serialized as safetensors together with the constructor config.
     """
-    RSB for inverse problems.
-    """
 
-    def __init__(self,
-                 backbone: str = 'ncsnpp_base',
-                 training_method: str = 'none',
-                 training_target: str = 'data',
-                 loss_weight_type: str = 'constant',
-                 bridge_type: str = 'VE',
-                 device: str = 'cuda',
-                 **ignored_kwargs):
-        """
-        Initialize the RSB model.
-
-        Args:
-            backbone (str): Name of the netowrk backbone architecture.
-            training_method (str): Training approach ('none', 'regularization', etc.).
-            training_target (str): Target for training ('data', etc.).
-            loss_weight_type (str): Type of loss weighting ('constant', etc.).
-            bridge_type (str): Type of Schrödinger bridge (e.g. 'VE' for Variance Exploding).
-            device (str): Device to run the model on ('cuda' or 'cpu').
-            **ignored_kwargs: Additional keyword arguments that are ignored.
-        """
-        super().__init__()
-        self.training_method = training_method
-        self.device = device
-
-        # Initialize generative model backbone
-        # Input channels depend on whether conditioning is used
-        if 'condition' not in training_method:
-            input_channels = 4  # Standard input (no additional conditioning)
-        else:
-            input_channels = 6  # Additional channels for conditioning information
-        self.generator = BackboneRegister.fetch(backbone)(
-            input_channels=input_channels)
-
-        # Initialize Stochastic Differential Equation (SDE) based on bridge type
-        sde_cls = None
-        if bridge_type == 'VP':
-            sde_cls = SB_VPSDE  # Variance Preserving SDE
-        elif bridge_type == 'VE':
-            sde_cls = SB_VESDE  # Variance Exploding SDE
-
-        self.sde = sde_cls(training_target=training_target,
-                           loss_weight_type=loss_weight_type,
-                           device=self.device)
-        self.to(self.device)
-
-    def forward(self, x, t, cond=[]):
-        """
-        Forward pass through the generator network.
-
-        Args:
-            x (torch.Tensor): Input tensor (typically noisy data).
-            t (torch.Tensor): Time step tensor.
-            cond (list): List of conditioning tensors.
-
-        Returns:
-            torch.Tensor: Output from the generator network.
-        """
-        input = torch.cat([x] + cond,
-                          dim=1)  # Concatenate input with conditioning
-        return self.generator(input, t)
-
-    def sampling(
+    def __init__(
         self,
-        audio,
-        predictive_fn=None,
-        num_step=5,
-        solver="SDE",
-        skip_type="time_uniform",
-    ):
-        """
-        Perform sampling/inference to generate enhanced audio.
+        backbone: str = "ncsnpp_base",
+        training_method: str = "none",
+        training_target: str = "data",
+        loss_weight_type: str = "constant",
+        bridge_type: Literal["VE", "VP"] = "VE",
+        sampling_solver: SolverName = "SDE",
+        device: str | torch.device = "cpu",
+        backbone_kwargs: dict[str, Any] | None = None,
+        sde_kwargs: dict[str, Any] | None = None,
+    ) -> None:
+        """Initialize the backbone, bridge SDE, and sampling algorithms."""
+        super().__init__()
+        validate_training_method(training_method)
+        self.backbone_name = backbone
+        self.training_method = training_method
+        self.training_target = training_target
+        self.loss_weight_type = loss_weight_type
+        self.bridge_type = bridge_type
+        self.sampling_solver = sampling_solver
 
-        Args:
-            audio (torch.Tensor): Input audio waveform to be enhanced.
-            predictive_fn (callable, optional): Function to predict initial state from observation.
-            num_step (int): Number of sampling steps.
-            solver (str): Type of solver ('SDE' or 'ODE').
-            skip_type (str): Time step scheduling ('time_uniform', etc.).
+        self.generator = BackboneRegister.fetch(backbone)(
+            input_channels=4,
+            **(backbone_kwargs or {}),
+        )
+        sde_types = {"VE": SB_VESDE, "VP": SB_VPSDE}
+        try:
+            sde_type = sde_types[bridge_type]
+        except KeyError as error:
+            raise ValueError(f"Unsupported bridge type: {bridge_type!r}") from error
+        self.sde = sde_type(
+            training_target=training_target,
+            loss_weight_type=loss_weight_type,
+            device=device,
+            **(sde_kwargs or {}),
+        )
 
-        Returns:
-            tuple: (enhanced_audio, intermediate_states, predicted_x0s)
-                - enhanced_audio: Final generated audio waveform
-                - intermediate_states: List of intermediate states during sampling
-                - predicted_x0s: List of predicted initial states
-        """
-        # Convert audio to STFT representation
-        y, invert_fn = STFTUtil.to_stft(audio, device=self.device)
+        self._sampling_target: Tensor | None = None
+        self._sampling_condition: list[Tensor] = []
+        self._sampling_evaluations = 0
+        self.sde_sampler = self.sde.get_sde_solver(model_fn=self._predict_x0)
+        self.ode_sampler = self.sde.get_ode_solver(model_fn=self._predict_x0)
+        self.sampler = self._select_sampler(sampling_solver)
+        self.to(device)
 
-        condition = [y]  # Start with observation as condition
+    @property
+    def model_device(self) -> torch.device:
+        """Return the device holding the model parameters."""
+        return next(self.parameters()).device
 
-        # Apply predictive function if specified
-        if self.training_method not in ['none', 'regularization']:
-            x_star = predictive_fn(y)  # Predict initial state from observation
-            if 'optimal' in self.training_method:
-                y = x_star  # Use prediction as target
-            if 'condition' in self.training_method:
-                condition.append(
-                    x_star)  # Add prediction as additional conditioning
+    @classmethod
+    def from_pretrained(
+        cls,
+        pretrained_model_name_or_path: str | Path,
+        *,
+        force_download: bool = False,
+        token: str | bool | None = None,
+        cache_dir: str | Path | None = None,
+        local_files_only: bool = False,
+        revision: str | None = None,
+        map_location: str | torch.device = "cpu",
+        **model_kwargs: Any,
+    ) -> Self:
+        """Load a Hub checkpoint or a local RSB run containing config.yml."""
+        model_path = Path(pretrained_model_name_or_path)
+        run_config_path = model_path / "config.yml"
+        if model_path.is_dir() and run_config_path.is_file() and not (model_path / "config.json").is_file():
+            run_config = read_config_from_yaml(run_config_path)
+            constructor_keys = {
+                "training_method",
+                "training_target",
+                "loss_weight_type",
+                "bridge_type",
+                "sampling_solver",
+                "backbone_kwargs",
+                "sde_kwargs",
+            }
+            constructor_config = {key: value for key, value in run_config.dict().items() if key in constructor_keys}
+            constructor_config["backbone"] = run_config.get(
+                "generative_backbone", run_config.get("backbone", "ncsnpp_base")
+            )
+            constructor_config.update(model_kwargs)
+            constructor_config["device"] = map_location
+            model = cls(**constructor_config)
+            load_model(model, model_path / "model.safetensors", device=str(map_location))
+            return model.eval()
+        return super().from_pretrained(
+            pretrained_model_name_or_path,
+            force_download=force_download,
+            token=token,
+            cache_dir=cache_dir,
+            local_files_only=local_files_only,
+            revision=revision,
+            map_location=map_location,
+            **model_kwargs,
+        )
 
-        global count
-        count = 0  # Counter for tracking number of model evaluations
+    def sync_device(self) -> None:
+        """Move non-module SDE state and samplers alongside model parameters."""
+        device = self.model_device
+        self.sde.device = device
+        self.sde_sampler.device = device
+        self.ode_sampler.device = device
+        for name, value in vars(self.sde).items():
+            if isinstance(value, Tensor):
+                setattr(self.sde, name, value.to(device))
 
-        @torch.no_grad()
-        def pred_x0_fn(xt, timestep):
-            """Prediction function for x0 estimation.
-            
-            Args:
-                xt (torch.Tensor): Current state tensor at time t
-                timestep (float): Current time step value
-                
-            Returns:
-                torch.Tensor: Predicted initial state (x0)
-            """
-            global count
-
-            # Create time step tensor for batch
-            timestep = torch.full((xt.shape[0], ),
-                                  timestep,
-                                  device=self.device,
-                                  dtype=torch.float32)
-
-            # Forward pass through generator
-            out = self.forward(xt, timestep, cond=condition)
-            count = count + 1  # Increment evaluation counter
-
-            # Compute predicted initial state using SDE
-            return self.sde.compute_pred_x0(
-                xt=xt,
-                t=timestep,
-                x1=y,  # Target/final state
-                net_out=out)
-
-        # Select appropriate solver based on configuration
+    def _select_sampler(self, solver: SolverName) -> SDESolver | ODESolver:
         if solver == "SDE":
-            sampler = self.sde.get_sde_solver(model_fn=pred_x0_fn)
-        elif solver == "ODE":
-            sampler = self.sde.get_ode_solver(model_fn=pred_x0_fn)
-        else:
-            raise NotImplementedError(f"Unsupported sampling method: {solver}")
+            return self.sde_sampler
+        if solver == "ODE":
+            return self.ode_sampler
+        raise ValueError(f"Unsupported sampling solver: {solver!r}")
 
-        # Perform the actual sampling process
-        x, xs, pred_x0s = sampler.sampling(x=y,
-                                           num_step=num_step,
-                                           skip_type=skip_type)
+    def forward(self, x: Tensor, t: Tensor, condition: Sequence[Tensor] | None = None) -> Tensor:
+        """Predict the configured SDE target for a perturbed spectrum."""
+        inputs = torch.cat([x, *(condition or [])], dim=1)
+        return self.generator(inputs, t)
 
-        # Convert back from STFT to audio waveform
-        audio = invert_fn(x)
+    @torch.no_grad()
+    def _predict_x0(self, xt: Tensor, timestep: Tensor | float) -> Tensor:
+        if self._sampling_target is None:
+            raise RuntimeError("Sampling context has not been initialized")
+        time = torch.as_tensor(timestep, device=self.model_device, dtype=torch.float32).expand(xt.shape[0])
+        network_output = self(xt, time, condition=self._sampling_condition)
+        self._sampling_evaluations += 1
+        return self.sde.compute_pred_x0(
+            xt=xt,
+            t=time,
+            x1=self._sampling_target,
+            net_out=network_output,
+        )
 
-        # Verify that the number of evaluations matches expected steps
-        assert count == num_step, "num_step count mismatch between expected and actual evaluations."
+    @torch.no_grad()
+    def sample(
+        self,
+        observation: Tensor,
+        *,
+        num_steps: int = 5,
+        solver: SolverName | None = None,
+        skip_type: str = "time_uniform",
+    ) -> tuple[Tensor, Tensor, Tensor]:
+        """Sample an enhanced spectrum from a noisy observation spectrum."""
+        if num_steps < 1:
+            raise ValueError("num_steps must be at least 1")
+        self.sync_device()
+        observation = observation.to(self.model_device)
+        self._sampling_target = observation
+        self._sampling_condition = [observation]
+        self._sampling_evaluations = 0
+        active_sampler = self._select_sampler(solver or self.sampling_solver)
+        self.sampler = active_sampler
+        try:
+            sample, trajectory, predictions = active_sampler.sampling(
+                x=observation,
+                num_step=num_steps,
+                skip_type=skip_type,
+            )
+        finally:
+            self._sampling_target = None
+            self._sampling_condition = []
+        if self._sampling_evaluations != num_steps:
+            raise RuntimeError(
+                f"Sampler performed {self._sampling_evaluations} model evaluations; expected {num_steps}"
+            )
+        return sample, trajectory, predictions
 
-        return audio, xs, pred_x0s
+    @torch.no_grad()
+    def enhance(
+        self,
+        audio: Tensor,
+        *,
+        num_steps: int = 5,
+        solver: SolverName | None = None,
+        skip_type: str = "time_uniform",
+    ) -> tuple[Tensor, Tensor, Tensor]:
+        """Enhance a waveform and return it with spectral sampling trajectories."""
+        observation, invert = STFTUtil.to_stft(audio, device=self.model_device)
+        enhanced, trajectory, predictions = self.sample(
+            observation,
+            num_steps=num_steps,
+            solver=solver,
+            skip_type=skip_type,
+        )
+        return invert(enhanced), trajectory, predictions

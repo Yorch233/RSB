@@ -1,3 +1,3 @@
-from RSB.common.register import Register
+from RSB.utils.register import Register
 
 BackboneRegister = Register()
