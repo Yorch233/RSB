@@ -190,8 +190,18 @@ and [metrics guide](docs/metrics.md) for complete options, result layouts, and t
 
 ## Citation
 
-If you use RSB in your research, please cite the accompanying paper. The final citation and paper link will be added
-when the publication is available.
+If you use RSB in your research, please cite the accompanying paper. 
+```
+@article{yao2026rsb, 
+  author  = {Yao, Qing and Gao, Lijian and Mao, Qirong and Dong, Ming},
+  title   = {Regularized Schr{\"o}dinger Bridge via Distortion-Perception Perturbation for High-Fidelity Speech Enhancement},
+  journal = {IEEE Transactions on Audio, Speech and Language Processing},
+  year    = {2026},
+  month   = jul,
+  doi     = {10.1109/TASLPRO.2026.3717234},
+  note    = {Early Access}
+}
+```
 
 ## Acknowledgements
 
