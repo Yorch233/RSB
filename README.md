@@ -8,9 +8,8 @@
 Regularized Schrödinger Bridge is a speech-enhancement framework that regularizes Schrödinger Bridge training to
 reduce exposure bias and improve the fidelity–realism tradeoff.
 
-- Official PyTorch implementation of *Regularized Schrodinger Bridge via Distortion-Perception Perturbation for High-Fidelity Speech Enhancement*.
-- Paper accepted; final link coming soon.
-
+- Official PyTorch implementation of *[Regularized Schrodinger Bridge via Distortion-Perception Perturbation for High-Fidelity Speech Enhancement](https://ieeexplore.ieee.org/document/11623672)*.
+  
 ![Distortion-perception perturbation](assets/schematic_perturbation.png)
 
 *Distortion-perception perturbation interpolates clean targets with offline posterior-mean estimates, producing
