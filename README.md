@@ -25,7 +25,7 @@ degraded speech through iterative reverse-time sampling.*
 Copy and paste this prompt to your coding agent (Claude Code, Codex, OpenCode, etc.):
 
 ```bash
-Install and configure RSB by following the instructions here: https://raw.githubusercontent.com/Yorch233/RSB/refs/heads/main/docs/installation.md)
+Install and configure RSB by following the instructions here: https://raw.githubusercontent.com/Yorch233/RSB/refs/heads/main/docs/installation.md
 ```
 
 ## For Agent
@@ -82,7 +82,7 @@ uv run rsb dataset create \
   --task enhancement \
   --clean wsj0 /path/to/wsj0 \
   --noise wham /path/to/wham \
-  --output-dir /path/to/wsj0-wham-denoising
+  --output-dir /path/to/wsj0-wham
 ```
 
 Create a reverberation-only dataset with the `dereverberation` task:
@@ -92,7 +92,7 @@ uv run rsb dataset create \
   --task dereverberation \
   --clean wsj0 /path/to/wsj0 \
   --noise none /path/to/wsj0 \
-  --output-dir /path/to/wsj0-dereverberation
+  --output-dir /path/to/wsj0-reverb
 ```
 
 For the reverberation-only command, the path supplied with `--noise none` must exist but its audio is not mixed. See
@@ -104,7 +104,7 @@ Register Voicebank+DEMAND or an output directory created above for training:
 uv run rsb dataset add --id voicebank --path /path/to/Voicebank+Demand --select
 ```
 
-Replace the path with `/path/to/wsj0-wham-denoising` or `/path/to/wsj0-dereverberation` when registering a dataset
+Replace the path with `/path/to/wsj0-wham` or `/path/to/wsj0-reverb` when registering a dataset
 created by this project.
 
 ### Configuration
