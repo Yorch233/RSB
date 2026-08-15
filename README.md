@@ -1,3 +1,5 @@
+
+
 # Regularized Schrödinger Bridge (RSB)
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
@@ -176,7 +178,9 @@ uv run rsb inference generative \
   --run rsb_generative_MMDDhhmm \
   --dataset voicebank \
   --sampler SDE \
-  --num-steps 50
+  --num-steps 50 \
+  --skip-type time_uniform \
+  --seed 10
 
 uv run rsb metric \
   --dir results/rsb_generative_MMDDhhmm/SDE_N=50 \
