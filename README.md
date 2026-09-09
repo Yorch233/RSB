@@ -1,19 +1,27 @@
-# Regularized Schrödinger Bridge (RSB)
+<div align="center">
+<img alt="RSB" src="assets/banner.png" width="800px" style="max-width: 100%;">
+  
+**Regularized Schrödinger Bridge** is a generative speech enhancement framework that regularizes Schrödinger Bridge training to
+reduce exposure bias and improve the fidelity–realism tradeoff.
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![Audio Demo](https://img.shields.io/badge/Audio%20Demo-RSB-orange)](https://yorch233.github.io/RSB/)
 [![GitHub](https://img.shields.io/badge/GitHub-Yorch233%2FRSB-black?logo=github)](https://github.com/Yorch233/RSB)
 [![Hugging Face](https://img.shields.io/badge/Hugging%20Face-Yorch233%2FRSB-yellow)](https://huggingface.co/Yorch233/RSB)
 
-Regularized Schrödinger Bridge is a speech-enhancement framework that regularizes Schrödinger Bridge training to
-reduce exposure bias and improve the fidelity–realism tradeoff.
+</div>
+
+______________________________________________________________________
 
 - Official PyTorch implementation of *[Regularized Schrodinger Bridge via Distortion-Perception Perturbation for High-Fidelity Speech Enhancement](https://ieeexplore.ieee.org/document/11623672)*.
-  
+
+&nbsp;
 ![Distortion-perception perturbation](assets/schematic_perturbation.png)
 
 *Distortion-perception perturbation interpolates clean targets with offline posterior-mean estimates, producing
 time-varying targets between distortion-optimal fidelity and perceptual realism.*
+
+&nbsp;
 
 ![RSB training and inference](assets/schematic_RSB.png)
 
