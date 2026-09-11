@@ -4,16 +4,18 @@
 **Regularized Schrödinger Bridge** is a generative speech enhancement framework that regularizes Schrödinger Bridge training to
 reduce exposure bias and improve the fidelity–realism tradeoff.
 
-[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
-[![Audio Demo](https://img.shields.io/badge/Audio%20Demo-RSB-orange)](https://yorch233.github.io/RSB/)
+[![Arxiv](https://img.shields.io/badge/Arxiv-2511.11686-red)](https://arxiv.org/abs/2511.11686)
+[![IEEE](https://img.shields.io/badge/IEEE%20Expore-10.1109/TASLPRO.2026.3717234-green)]([LICENSE](https://ieeexplore.ieee.org/document/11623672))
 [![GitHub](https://img.shields.io/badge/GitHub-Yorch233%2FRSB-black?logo=github)](https://github.com/Yorch233/RSB)
 [![Hugging Face](https://img.shields.io/badge/Hugging%20Face-Yorch233%2FRSB-yellow)](https://huggingface.co/Yorch233/RSB)
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 
 </div>
 
 ______________________________________________________________________
 
-- Official PyTorch implementation of *[Regularized Schrodinger Bridge via Distortion-Perception Perturbation for High-Fidelity Speech Enhancement](https://ieeexplore.ieee.org/document/11623672)*.
+- Official PyTorch implementation of *[Regularized Schrodinger Bridge via Distortion-Perception Perturbation for High-Fidelity Speech Enhancement](https://ieeexplore.ieee.org/document/11623672)* [[Arxiv preprint]](https://ieeexplore.ieee.org/document/11623672).
+- Online Demo: [Here](https://yorch233.github.io/RSB/)
 
 &nbsp;
 ![Distortion-perception perturbation](assets/schematic_perturbation.png)
