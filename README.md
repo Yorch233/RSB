@@ -4,6 +4,7 @@
 **Regularized Schrödinger Bridge** is a generative speech enhancement framework that regularizes Schrödinger Bridge training to
 reduce exposure bias and improve the fidelity–realism tradeoff.
 
+[![Demo](https://img.shields.io/badge/Demo-RSB-4CAF50?logo=googlechrome&logoColor=white)](https://yorch233.github.io/RSB/)
 [![Arxiv](https://img.shields.io/badge/Arxiv-2511.11686-red)](https://arxiv.org/abs/2511.11686)
 [![IEEE](https://img.shields.io/badge/IEEE%20Expore-10.1109/TASLPRO.2026.3717234-green)]([LICENSE](https://ieeexplore.ieee.org/document/11623672))
 [![GitHub](https://img.shields.io/badge/GitHub-Yorch233%2FRSB-black?logo=github)](https://github.com/Yorch233/RSB)
