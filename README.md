@@ -16,7 +16,6 @@ reduce exposure bias and improve the fidelity–realism tradeoff.
 ______________________________________________________________________
 
 - Official PyTorch implementation of *[Regularized Schrodinger Bridge via Distortion-Perception Perturbation for High-Fidelity Speech Enhancement](https://ieeexplore.ieee.org/document/11623672)*.
-- Online Demo: [Here](https://yorch233.github.io/RSB/)
 
 &nbsp;
 ![Distortion-perception perturbation](assets/schematic_perturbation.png)
