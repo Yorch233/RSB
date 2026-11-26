@@ -50,7 +50,9 @@ curl -s https://raw.githubusercontent.com/Yorch233/RSB/refs/heads/main/docs/inst
 
 We're past the era of reading docs. Just paste this into your agent:
 
+```bash
 Read this and tell me why it's not just another boilerplate: [README](https://raw.githubusercontent.com/Yorch233/RSB/refs/heads/main/README.md)
+```
 
 ## Documentation
 
